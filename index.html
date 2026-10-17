@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="Hanaqaad College – Berbera's premier institution for Computer Science, Languages, and Vocational Skills. Empowering Berbera's youth through technology, language mastery, and professional skills." />
+  <meta name="keywords"
+    content="Hanaqaad College, Berbera, Somaliland, Computer Science, Networking, English, Vocational Training" />
+  <meta name="author" content="Hanaqaad College" />
+  <meta property="og:title" content="Hanaqaad College – Berbera, Somaliland" />
+  <meta property="og:description"
+    content="Empowering Berbera's youth through technology, language mastery, and professional skills." />
+  <meta property="og:type" content="website" />
+
+  <title>Hanaqaad College – Berbera, Somaliland</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <!-- ============================================================
+       STICKY NAVIGATION
+  ============================================================ -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-container">
+      <!-- Logo -->
+      <a href="#home" class="nav-logo" aria-label="Hanaqaad College Home">
+        <img src="logo.png" alt="Hanaqaad College Logo" class="brand-logo" />
+        <div class="logo-text">
+          <span class="logo-name">Hanaqaad</span>
+          <span class="logo-sub">College</span>
+        </div>
+      </a>
+
+      <!-- Desktop Links -->
+      <nav class="nav-links" id="navLinks" aria-label="Main Navigation">
+        <a href="#home" class="nav-link active" data-section="home">Home</a>
+        <a href="#about" class="nav-link" data-section="about">About</a>
+        <a href="#programs" class="nav-link" data-section="programs">Programs</a>
+        <a href="#student-portal" class="nav-link" data-section="student-portal">Student Portal</a>
+        <a href="#alumni" class="nav-link" data-section="alumni">Alumni</a>
+        <a href="#contact" class="nav-link" data-section="contact">Contact</a>
+        <a href="#contact" class="btn btn-accent btn-sm nav-cta">Apply Now</a>
+        <a href="admin/login.html" class="btn btn-ghost btn-sm nav-admin-link" aria-label="Admin portal">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="display:inline-block;vertical-align:middle">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+          Admin
+        </a>
+      </nav>
+
+      <!-- Hamburger -->
+      <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Mobile Menu Overlay -->
+  <div class="mobile-menu" id="mobileMenu" role="dialog" aria-modal="true" aria-label="Mobile Navigation">
+    <a href="#home" class="mobile-link" data-section="home">Home</a>
+    <a href="#about" class="mobile-link" data-section="about">About</a>
+    <a href="#programs" class="mobile-link" data-section="programs">Programs</a>
+    <a href="#student-portal" class="mobile-link" data-section="student-portal">Student Portal</a>
+    <a href="#alumni" class="mobile-link" data-section="alumni">Alumni</a>
+    <a href="#contact" class="mobile-link" data-section="contact">Contact</a>
+    <a href="#contact" class="btn btn-accent mobile-cta">Apply Now</a>
+    <a href="admin/login.html" class="mobile-link" style="color:var(--text-muted);font-size:0.875rem">🔒 Admin Portal</a>
+  </div>
+
+  <main>
+
+    <!-- ============================================================
+         SECTION 1: HERO
+    ============================================================ -->
+    <section class="hero" id="home">
+      <!-- Animated Background Blobs -->
+      <div class="hero-blobs" aria-hidden="true">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+      </div>
+
+      <div class="container hero-container">
+        <div class="hero-badge">
+          <span class="badge-dot"></span>
+          Enrollments Open — Berbera, Somaliland
+        </div>
+        <h1 class="hero-title">
+          Empowering Berbera's<br />
+          <span class="text-gradient">Next Generation</span><br />
+          of Professionals
+        </h1>
+        <p class="hero-subtitle">
+          Hanaqaad College offers world-class Computer Science, Language, and Vocational programs designed to launch
+          careers and transform lives in Berbera and beyond.
+        </p>
+        <div class="hero-cta-group">
+          <a href="#programs" class="btn btn-accent btn-lg">Explore Programs</a>
+          <a href="#alumni" class="btn btn-outline btn-lg">Meet Our Alumni</a>
+        </div>
+
+        <!-- Stats Strip -->
+        <div class="stats-strip">
+          <div class="stat-item">
+            <span class="stat-number" data-target="15">0</span><span class="stat-suffix">+</span>
+            <span class="stat-label">Expert Instructors</span>
+          </div>
+          <div class="stat-divider" aria-hidden="true"></div>
+          <div class="stat-item">
+            <span class="stat-number" data-target="54">0</span><span class="stat-suffix">+</span>
+            <span class="stat-label">Certified Alumni</span>
+          </div>
+          <div class="stat-divider" aria-hidden="true"></div>
+          <div class="stat-item">
+            <span class="stat-number" data-target="2">0</span><span class="stat-suffix"></span>
+            <span class="stat-label">Modern Labs</span>
+          </div>
+          <div class="stat-divider" aria-hidden="true"></div>
+          <div class="stat-item">
+            <span class="stat-number" data-target="3">0</span><span class="stat-suffix"></span>
+            <span class="stat-label">Specializations</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scroll Hint -->
+      <a href="#about" class="scroll-hint" aria-label="Scroll to About section">
+        <span></span>
+      </a>
+    </section>
+
+    <!-- ============================================================
+         SECTION 2: ABOUT
+    ============================================================ -->
+    <section class="about section-pad" id="about">
+      <div class="container">
+
+        <div class="section-header">
+          <span class="section-tag">Who We Are</span>
+          <h2 class="section-title">Built for Berbera.<br />Built for the Future.</h2>
+          <p class="section-desc">
+            Hanaqaad College was founded with a singular vision: to provide the youth of Berbera with the technical and
+            professional skills needed to compete in today's global economy.
+          </p>
+        </div>
+
+        <div class="about-grid">
+          <!-- Left: Story -->
+          <div class="about-story">
+            <p>
+              Located near Al-Nuur in Berbera, Somaliland, Hanaqaad College bridges the gap between ambition and
+              opportunity. Our curriculum is meticulously crafted by industry professionals and educators who understand
+              both the local context and global standards.
+            </p>
+            <p>
+              From hands-on computer labs running cutting-edge software, to language labs designed to cultivate English
+              and Arabic fluency, every resource at Hanaqaad is purpose-built to produce graduates who are
+              <strong>confident, capable, and career-ready</strong>.
+            </p>
+            <p>
+              We offer flexible scheduling, affordable tuition, and certificates recognized by employers across
+              Somaliland and the Horn of Africa.
+            </p>
+            <div class="about-actions">
+              <a href="#programs" class="btn btn-primary">View Programs</a>
+              <a href="#contact" class="btn btn-ghost">Get In Touch</a>
+            </div>
+          </div>
+
+          <!-- Right: Values Cards -->
+          <div class="values-grid">
+            <div class="value-card">
+              <div class="value-icon" aria-hidden="true">🎯</div>
+              <h3>Mission-Driven</h3>
+              <p>Every course, every lesson is aligned to one goal: your career success.</p>
+            </div>
+            <div class="value-card">
+              <div class="value-icon" aria-hidden="true">💡</div>
+              <h3>Innovation First</h3>
+              <p>We teach you the technologies and tools shaping tomorrow's workforce.</p>
+            </div>
+            <div class="value-card">
+              <div class="value-icon" aria-hidden="true">🤝</div>
+              <h3>Community Focused</h3>
+              <p>Rooted in Berbera, committed to uplifting every student, every family.</p>
+            </div>
+            <div class="value-card">
+              <div class="value-icon" aria-hidden="true">🏆</div>
+              <h3>Excellence Standard</h3>
+              <p>Our instructors hold international qualifications and real-world experience.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 3: PROGRAMS
+    ============================================================ -->
+    <section class="programs section-pad bg-subtle" id="programs">
+      <div class="container">
+
+        <div class="section-header">
+          <span class="section-tag">What We Offer</span>
+          <h2 class="section-title">Our Academic Programs</h2>
+          <p class="section-desc">
+            Three core specializations, dozens of career paths. Choose your direction and build your future with
+            Hanaqaad College.
+          </p>
+        </div>
+
+        <div class="programs-grid">
+
+          <!-- Program 1 -->
+          <div class="program-card">
+            <div class="program-icon cs-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <polyline points="16 18 22 12 16 6" />
+                <polyline points="8 6 2 12 8 18" />
+              </svg>
+            </div>
+            <span class="program-tag">Technology</span>
+            <h3>Computer Literacy Diploma (CLD)</h3>
+            <p>From web development and software engineering to cybersecurity and cloud computing — prepare for a career
+              in tech.</p>
+            <ul class="program-courses">
+              <li>Web Development (HTML, CSS, JS)</li>
+              <li>Python Programming</li>
+              <li>Network Administration</li>
+              <li>Cybersecurity Fundamentals</li>
+              <li>Database Management</li>
+              <li>Computer Hardware & Repairs</li>
+            </ul>
+            <a href="#contact" class="btn btn-primary btn-sm">Enroll Now</a>
+          </div>
+
+          <!-- Program 2 -->
+          <div class="program-card program-card-featured">
+            <div class="featured-badge">Most Popular</div>
+            <div class="program-icon lang-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M5 8l6 6" />
+                <path d="M4 14l6-6 2-3" />
+                <path d="M2 5h12" />
+                <path d="M7 2h1" />
+                <path d="M22 22l-5-10-5 10" />
+                <path d="M14 18h6" />
+              </svg>
+            </div>
+            <span class="program-tag">Languages</span>
+            <h3>English Department (ED)</h3>
+            <p>Unlock global opportunities by achieving fluency in English and Arabic through structured, communicative
+              programs.</p>
+            <ul class="program-courses">
+              <li>English Fluency (Beginner → Advanced)</li>
+              <li>Business & Professional English</li>
+              <li>IELTS Preparation</li>
+              <li>Arabic Language & Quranic Studies</li>
+              <li>Public Speaking & Presentation</li>
+              <li>Academic Writing Skills</li>
+            </ul>
+            <a href="#contact" class="btn btn-accent btn-sm">Enroll Now</a>
+          </div>
+
+          <!-- Program 3 -->
+          <div class="program-card">
+            <div class="program-icon voc-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path
+                  d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+              </svg>
+            </div>
+            <span class="program-tag">Vocational</span>
+            <h3>Training Course (TC)</h3>
+            <p>Practical, hands-on training in high-demand trades that lead to immediate employment and
+              entrepreneurship.</p>
+            <ul class="program-courses">
+              <li>Graphic Design & Branding</li>
+              <li>Digital Marketing & Social Media</li>
+              <li>Bookkeeping & Accounting</li>
+              <li>Project Management Basics</li>
+              <li>Entrepreneurship & Business Setup</li>
+              <li>Secretarial & Office Administration</li>
+            </ul>
+            <a href="#contact" class="btn btn-primary btn-sm">Enroll Now</a>
+          </div>
+
+          <!-- Program 4: Arabic Language -->
+          <div class="program-card">
+            <div class="program-icon lang-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+              </svg>
+            </div>
+            <span class="program-tag">Languages</span>
+            <h3>Arabic Language (Arabic)</h3>
+            <p>Comprehensive Arabic studies covering modern standard Arabic, Quranic grammar, writing, and professional communication.</p>
+            <ul class="program-courses">
+              <li>Modern Standard Arabic (Beginner → Advanced)</li>
+              <li>Arabic Grammar (Nahwu & Sarf)</li>
+              <li>Quranic Recitation & Tajweed</li>
+              <li>Commercial Arabic & Correspondence</li>
+              <li>Arabic Public Speaking</li>
+              <li>Literature & Essay Composition</li>
+            </ul>
+            <a href="#contact" class="btn btn-primary btn-sm">Enroll Now</a>
+          </div>
+
+          <!-- Program 5: Mathematics -->
+          <div class="program-card">
+            <div class="program-icon cs-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+                <line x1="4" y1="12" x2="20" y2="12"/>
+              </svg>
+            </div>
+            <span class="program-tag">Sciences</span>
+            <h3>Mathematics (Maths)</h3>
+            <p>Fundamental and applied mathematics designed to build strong analytical, computational, and problem-solving capabilities.</p>
+            <ul class="program-courses">
+              <li>Foundations of Mathematics & Algebra</li>
+              <li>Calculus & Applied Geometry</li>
+              <li>Probability & Business Statistics</li>
+              <li>Financial & Commercial Mathematics</li>
+              <li>Discrete Mathematics for Computing</li>
+              <li>Quantitative Reasoning & Problem Solving</li>
+            </ul>
+            <a href="#contact" class="btn btn-primary btn-sm">Enroll Now</a>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 3.5: STUDENT SEARCH PORTAL
+    ============================================================ -->
+    <section class="student-portal section-pad" id="student-portal">
+      <div class="container">
+
+        <div class="section-header">
+          <span class="section-tag">Student Verification</span>
+          <h2 class="section-title">Academic & Records Portal</h2>
+          <p class="section-desc">
+            Check your enrollment details, class attendance, tuition balance, and official examination results. Enter your Student ID and 4-digit PIN to securely access your records.
+          </p>
+        </div>
+
+        <div class="portal-card">
+          <!-- Search Form -->
+          <div class="portal-search-panel" id="portalSearchPanel">
+            <form id="studentPortalForm" class="portal-search-form" autocomplete="off">
+              <div class="portal-form-grid">
+                <div class="portal-form-group">
+                  <label for="portalStudentId">Student ID</label>
+                  <div class="portal-input-icon-wrap">
+                    <input type="text" id="portalStudentId" class="portal-input" placeholder="e.g. HC-500" required />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="portal-icon" aria-hidden="true">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                  </div>
+                  <span class="portal-hint">Official Student ID assigned during registration</span>
+                </div>
+
+                <div class="portal-form-group">
+                  <label for="portalPin">Security PIN / Phone Digits</label>
+                  <div class="portal-input-icon-wrap">
+                    <input type="password" id="portalPin" class="portal-input" placeholder="4-digit PIN or last 4 digits" maxlength="10" required />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="portal-icon" aria-hidden="true">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                  </div>
+                  <span class="portal-hint">Protects your private grades &amp; fee information</span>
+                </div>
+              </div>
+
+              <div class="portal-actions">
+                <button type="submit" class="btn btn-primary portal-submit-btn" id="portalSubmitBtn">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                  Search Academic Records
+                </button>
+              </div>
+            </form>
+
+            <div class="portal-privacy-note">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              <span><strong>Privacy Protected:</strong> Student records are strictly confidential and retrieved individually through two-factor verification. Public directories are not published.</span>
+            </div>
+          </div>
+
+          <!-- Alert / Status Notice Area -->
+          <div id="portalNotice" class="portal-notice" style="display:none"></div>
+
+          <!-- Result Card Area (Populated on match) -->
+          <div id="portalResultArea" class="portal-result-card" style="display:none"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 4: ALUMNI DIRECTORY
+    ============================================================ -->
+    <section class="alumni section-pad bg-subtle" id="alumni">
+      <div class="container">
+
+        <div class="section-header">
+          <span class="section-tag">Our Graduates</span>
+          <h2 class="section-title">Alumni Directory</h2>
+          <p class="section-desc">
+            Celebrating 54 graduates who are now making an impact across Somaliland and beyond. Search by name or
+            course to find a fellow alumnus.
+          </p>
+        </div>
+
+        <!-- Search & Filter Bar -->
+        <div class="alumni-controls">
+          <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="search" id="alumniSearch" class="search-input" placeholder="Search by name or course…"
+              aria-label="Search alumni by name or course" />
+          </div>
+          <div class="filter-pills" role="group" aria-label="Filter alumni by course">
+            <button class="filter-pill active" data-filter="all">All</button>
+            <button class="filter-pill" data-filter="cld">Computer Literacy Diploma</button>
+            <button class="filter-pill" data-filter="tc">Training Course</button>
+            <button class="filter-pill" data-filter="ed">English Department</button>
+          </div>
+        </div>
+
+        <!-- Alumni Count -->
+        <p class="alumni-count" id="alumniCount" aria-live="polite">Showing <strong>54</strong> graduates</p>
+
+        <!-- Alumni Grid -->
+        <div class="alumni-grid" id="alumniGrid" aria-label="Alumni directory">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- No Results -->
+        <div class="no-results hidden" id="noResults" role="status">
+          <div class="no-results-icon">🎓</div>
+          <h3>No alumni found</h3>
+          <p>Try adjusting your search or filter criteria.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 5: CONTACT
+    ============================================================ -->
+    <section class="contact section-pad bg-subtle" id="contact">
+      <div class="container">
+
+        <div class="section-header">
+          <span class="section-tag">Get In Touch</span>
+          <h2 class="section-title">We'd Love to Hear From You</h2>
+          <p class="section-desc">
+            Ready to start your journey? Apply today, ask a question, or simply drop by our campus in Berbera.
+          </p>
+        </div>
+
+        <div class="contact-grid">
+
+          <!-- Contact Info Panel -->
+          <div class="contact-info">
+            <h3>Contact Information</h3>
+
+            <div class="contact-item">
+              <div class="contact-item-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path
+                    d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 13a19.79 19.79 0 01-3.07-8.67A2 2 0 012 2.18h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+                </svg>
+              </div>
+              <div>
+                <span class="contact-item-label">Phone Numbers</span>
+                <a href="tel:+252634284015" class="contact-item-value">+252 63 4284015</a>
+                <a href="tel:+252634964724" class="contact-item-value">+252 63 4964724</a>
+                <a href="tel:+252634718098" class="contact-item-value">+252 63 4718098</a>
+                <a href="tel:+252657575175" class="contact-item-value">+252 65 7575175</a>
+              </div>
+            </div>
+
+            <div class="contact-item">
+              <div class="contact-item-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+              </div>
+              <div>
+                <span class="contact-item-label">Campus Location</span>
+                <span class="contact-item-value">Kaalinta Al-Nuur</span>
+                <span class="contact-item-value">Near Haqabtire Restaurant</span>
+                <span class="contact-item-value">Berbera, Somaliland</span>
+              </div>
+            </div>
+
+            <div class="contact-item">
+              <div class="contact-item-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+              </div>
+              <div>
+                <span class="contact-item-label">College Hours</span>
+                <span class="contact-item-value">Whole the week</span>
+              </div>
+            </div>
+
+            <!-- Quick Map Placeholder -->
+            <div class="map-placeholder" aria-label="Map showing Hanaqaad College location in Berbera">
+              <div class="map-pin-anim" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path
+                    d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
+                </svg>
+              </div>
+              <p>Berbera, Somaliland</p>
+              <p class="map-sub">Kaalinta Al-Nuur · Near Haqabtire Restaurant</p>
+            </div>
+          </div>
+
+          <!-- Contact Form -->
+          <div class="contact-form-wrap">
+            <h3>Send Us a Message</h3>
+            <form name="contact" method="POST" action="/thank-you" data-netlify="true" netlify-honeypot="bot-field"
+              id="contactForm" class="contact-form" novalidate>
+              <!-- Netlify Honeypot -->
+              <label class="visually-hidden">
+                Don't fill this out: <input name="bot-field" tabindex="-1" />
+              </label>
+              <!-- Hidden Netlify form name -->
+              <input type="hidden" name="form-name" value="contact" />
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="firstName">First Name *</label>
+                  <input type="text" id="firstName" name="first_name" required placeholder="Ahmed"
+                    autocomplete="given-name" />
+                  <span class="field-error" aria-live="polite"></span>
+                </div>
+                <div class="form-group">
+                  <label for="lastName">Last Name *</label>
+                  <input type="text" id="lastName" name="last_name" required placeholder="Mohamed"
+                    autocomplete="family-name" />
+                  <span class="field-error" aria-live="polite"></span>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="phone">Phone Number *</label>
+                <input type="tel" id="phone" name="phone" required placeholder="063 428 4015" autocomplete="tel" />
+                <span class="field-error" aria-live="polite"></span>
+              </div>
+
+              <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email" />
+                <span class="field-error" aria-live="polite"></span>
+              </div>
+
+              <div class="form-group">
+                <label for="interest">Program of Interest</label>
+                <select id="interest" name="program_interest">
+                  <option value="" disabled selected>Select a program…</option>
+                  <optgroup label="Computer Literacy Diploma (CLD)">
+                    <option value="web-dev">Web Development</option>
+                    <option value="python">Python Programming</option>
+                    <option value="networking">Network Administration</option>
+                    <option value="cybersecurity">Cybersecurity</option>
+                    <option value="database">Database Management</option>
+                    <option value="hardware">Computer Hardware & Repairs</option>
+                  </optgroup>
+                  <optgroup label="English Department (ED)">
+                    <option value="english">English Fluency</option>
+                    <option value="business-english">Business English</option>
+                    <option value="ielts">IELTS Preparation</option>
+                    <option value="arabic">Arabic Language</option>
+                  </optgroup>
+                  <optgroup label="Training Course (TC)">
+                    <option value="graphic-design">Graphic Design</option>
+                    <option value="digital-marketing">Digital Marketing</option>
+                    <option value="accounting">Bookkeeping & Accounting</option>
+                    <option value="entrepreneurship">Entrepreneurship</option>
+                  </optgroup>
+                  <optgroup label="Arabic Language (Arabic)">
+                    <option value="arabic-diploma">Arabic Language Diploma</option>
+                    <option value="quranic-studies">Quranic & Tajweed Studies</option>
+                  </optgroup>
+                  <optgroup label="Mathematics (Maths)">
+                    <option value="applied-maths">Applied Mathematics</option>
+                    <option value="business-statistics">Statistics & Problem Solving</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="message">Your Message *</label>
+                <textarea id="message" name="message" rows="5" required
+                  placeholder="Tell us about yourself or ask any questions you have…"></textarea>
+                <span class="field-error" aria-live="polite"></span>
+              </div>
+
+              <button type="submit" class="btn btn-accent btn-lg btn-full" id="submitBtn">
+                <span class="btn-text">Send Message</span>
+                <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  aria-hidden="true">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              </button>
+
+              <p class="form-note">We'll respond within 24 hours. Your information is kept private.</p>
+            </form>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       FOOTER
+  ============================================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+
+        <!-- Brand -->
+        <div class="footer-brand">
+          <div class="footer-logo">
+            <img src="logo.png" alt="Hanaqaad College Logo" class="brand-logo footer-brand-logo" />
+            <div class="logo-text">
+              <span class="logo-name">Hanaqaad</span>
+              <span class="logo-sub">College</span>
+            </div>
+          </div>
+          <p class="footer-tagline">
+            Empowering Berbera's youth through technology, language, and professional skills since our founding.
+          </p>
+          <div class="footer-phones">
+            <a href="tel:+252634284015">+252 63 4284015</a>
+            <a href="tel:+252634964724">+252 63 4964724</a>
+            <a href="tel:+252634718098">+252 63 4718098</a>
+            <a href="tel:+252657575175">+252 65 7575175</a>
+          </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="footer-col">
+          <h4>Quick Links</h4>
+          <ul>
+            <li><a href="#home">Home</a></li>
+            <li><a href="#about">About Us</a></li>
+            <li><a href="#programs">Programs</a></li>
+            <li><a href="#student-portal">Student Portal</a></li>
+            <li><a href="#alumni">Alumni</a></li>
+            <li><a href="#contact">Contact</a></li>
+          </ul>
+        </div>
+
+        <!-- Programs -->
+        <div class="footer-col">
+          <h4>Programs</h4>
+          <ul>
+            <li><a href="#programs">Computer Literacy Diploma (CLD)</a></li>
+            <li><a href="#programs">English Department (ED)</a></li>
+            <li><a href="#programs">Training Course (TC)</a></li>
+            <li><a href="#programs">Arabic Language (Arabic)</a></li>
+            <li><a href="#programs">Mathematics (Maths)</a></li>
+          </ul>
+        </div>
+
+        <!-- Contact Info -->
+        <div class="footer-col">
+          <h4>Find Us</h4>
+          <address>
+            <p>Kaalinta Al-Nuur</p>
+            <p>Near Haqabtire Restaurant</p>
+            <p>Berbera, Somaliland</p>
+          </address>
+          <div class="footer-hours">
+            <p>Whole the week</p>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="footer-bottom">
+        <p>&copy; <span id="footerYear"></span> Hanaqaad College, Berbera. All rights reserved.</p>
+        <p class="footer-credits">Built with ❤️ for Berbera's future leaders.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Back to Top -->
+  <button class="back-to-top" id="backToTop" aria-label="Back to top">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+      <polyline points="18 15 12 9 6 15" />
+    </svg>
+  </button>
+
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+  <!-- Supabase Env Config -->
+  <script src="env.js"></script>
+
+  <!-- Main Script -->
+  <script src="app.js?v=3.0"></script>
+</body>
+
+</html>
