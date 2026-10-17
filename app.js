@@ -626,7 +626,11 @@ function initStudentPortal() {
   function renderStudentPortalView(student, attendanceOverride = null, feesOverride = null, examsOverride = null) {
     const studentIdCode = student.student_id || student.id;
     const fullName = `${student.first_name || ''} ${student.last_name || ''}`.trim() || 'Enrolled Student';
-    const programName = PROGRAM_LABELS[student.program] || (student.program ? student.program.toUpperCase() : 'Diploma Course');
+    const programLabels = (student.program || '').split(',').map(p => {
+      const k = p.trim().toLowerCase();
+      return PROGRAM_LABELS[k] || (k ? k.toUpperCase() : '');
+    }).filter(Boolean);
+    const programName = programLabels.length > 0 ? programLabels.join(' & ') : 'Diploma Course';
     const initials = `${(student.first_name || 'H')[0]}${(student.last_name || 'C')[0]}`.toUpperCase();
 
     // Mask phone number for privacy e.g. "+252 63 •••• 56"

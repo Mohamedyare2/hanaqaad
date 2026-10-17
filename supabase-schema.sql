@@ -16,6 +16,17 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ── 1.5 TEACHERS (Admin-created teacher accounts: Name & Phone only) ──
+CREATE TABLE IF NOT EXISTS teachers (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  first_name    TEXT NOT NULL,
+  last_name     TEXT NOT NULL,
+  phone         TEXT NOT NULL UNIQUE,
+  role          TEXT NOT NULL DEFAULT 'teacher',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ── 2. PROGRAMS (Dynamic, admin-managed) ──────────────────
 CREATE TABLE IF NOT EXISTS programs (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -161,6 +172,7 @@ CREATE TRIGGER exams_updated_at BEFORE UPDATE ON exams FOR EACH ROW EXECUTE FUNC
 
 -- ── ROW LEVEL SECURITY ────────────────────────────────────
 ALTER TABLE profiles          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE teachers          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE programs          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE students          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance        ENABLE ROW LEVEL SECURITY;
@@ -217,6 +229,19 @@ CREATE POLICY "Profiles: staff can read"
 CREATE POLICY "Profiles: admin manages"
   ON profiles FOR ALL TO authenticated
   USING (is_admin()) WITH CHECK (is_admin());
+
+-- TEACHERS: Admin manages teachers. Staff and anon can read for login lookup.
+CREATE POLICY "Teachers: admin manage"
+  ON teachers FOR ALL TO authenticated
+  USING (is_admin()) WITH CHECK (is_admin());
+
+CREATE POLICY "Teachers: staff read"
+  ON teachers FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY "Teachers: login lookup"
+  ON teachers FOR SELECT TO anon
+  USING (true);
 
 -- PROGRAMS: All authenticated staff can read. Only admins can write.
 CREATE POLICY "Programs: staff read"

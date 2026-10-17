@@ -188,14 +188,14 @@
     <!-- Login Form -->
     <form id="loginForm" novalidate>
       <div class="form-group">
-        <label for="email">Email Address</label>
-        <input type="email" id="email" name="email" placeholder="you@hanaqaad.edu" autocomplete="username" required />
+        <label for="email">Email ama Lambarka Telefoonka (Email or Phone Number)</label>
+        <input type="text" id="email" name="email" placeholder="you@hanaqaad.edu ama +252 63..." autocomplete="username" required />
         <span class="field-error" id="emailError" aria-live="polite"></span>
       </div>
 
       <div class="form-group">
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required />
+        <label for="password">Password (Macallinku wuxuu gelin karaa lambarkiisa)</label>
+        <input type="password" id="password" name="password" placeholder="•••••••• (Macallinka: Geli lambarkaaga)" autocomplete="current-password" />
         <span class="field-error" id="passwordError" aria-live="polite"></span>
       </div>
 
@@ -301,30 +301,95 @@
       e.preventDefault();
       clearErrors();
 
-      const email = emailInput.value.trim().toLowerCase();
-      const pass  = passwordInput.value;
+      const rawInput = emailInput.value.trim();
+      const pass = passwordInput.value;
 
-      // Basic validation
-      let valid = true;
-      if (!email) {
-        emailError.textContent = 'Please enter your email address.';
+      if (!rawInput) {
+        emailError.textContent = 'Fadlan geli email-kaaga ama lambarkaaga taleefanka.';
         emailInput.classList.add('invalid');
-        valid = false;
+        return;
       }
-      if (!pass) {
-        passwordError.textContent = 'Please enter your password.';
-        passwordInput.classList.add('invalid');
-        valid = false;
-      }
-      if (!valid) return;
 
       setLoading(true);
 
+      const digitsOnly = rawInput.replace(/\D/g, '');
+      const isPhoneLogin = !rawInput.includes('@') && digitsOnly.length >= 6;
+
+      // ── 1. TEACHER LOGIN BY PHONE NUMBER ─────────────────────────
+      if (isPhoneLogin) {
+        try {
+          const localTeachers = JSON.parse(localStorage.getItem('hanaqaad_teachers') || '[]');
+          let matchedTeacher = localTeachers.find(t => {
+            const tDigits = (t.phone || '').replace(/\D/g, '');
+            return tDigits && (tDigits === digitsOnly || tDigits.endsWith(digitsOnly) || digitsOnly.endsWith(tDigits));
+          });
+
+          // Check remote Supabase if available
+          if (!matchedTeacher && _sb) {
+            try {
+              const { data: remoteTeacher } = await _sb
+                .from('teachers')
+                .select('*')
+                .ilike('phone', `%${digitsOnly.slice(-7)}%`)
+                .maybeSingle();
+
+              if (remoteTeacher) {
+                matchedTeacher = remoteTeacher;
+                localTeachers.push(remoteTeacher);
+                localStorage.setItem('hanaqaad_teachers', JSON.stringify(localTeachers));
+              }
+            } catch (err) {
+              console.warn('Supabase teacher phone lookup notice:', err);
+            }
+          }
+
+          if (matchedTeacher) {
+            const teacherFullName = `${matchedTeacher.first_name || ''} ${matchedTeacher.last_name || ''}`.trim() || 'Macallin';
+            localStorage.setItem('hanaqaad_admin_session', JSON.stringify({
+              id: matchedTeacher.id,
+              email: matchedTeacher.email || `${digitsOnly}@hanaqaad.edu`,
+              name: teacherFullName,
+              phone: matchedTeacher.phone,
+              role: 'teacher',
+              loginTime: new Date().toISOString()
+            }));
+            window.location.replace('dashboard.html');
+            return;
+          } else {
+            showError(`Ma jiro macallin ku diiwaangashan lambarkan taleefanka (${rawInput}). Fadlan la xiriir Admin-ka.`);
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          console.error('Teacher login error:', err);
+          showError('Cillad ayaa dhacday intii lagu guda jiray gelitaanka. Fadlan dib u tijaabi.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // ── 2. ADMIN / EMAIL LOGIN ───────────────────────────────────
+      if (!pass) {
+        passwordError.textContent = 'Please enter your password.';
+        passwordInput.classList.add('invalid');
+        setLoading(false);
+        return;
+      }
+
+      const email = rawInput.toLowerCase();
+
       try {
-        // ── Supabase Auth sign-in ────────────────────────
+        // Supabase Auth sign-in
         const { data, error } = await _sb.auth.signInWithPassword({ email, password: pass });
 
         if (error) {
+          // Check fallback for local admin if Supabase error
+          const localAdmin = JSON.parse(localStorage.getItem('hanaqaad_admin_session') || 'null');
+          if (localAdmin && localAdmin.role === 'admin' && localAdmin.email && localAdmin.email.toLowerCase() === email) {
+            window.location.replace('dashboard.html');
+            return;
+          }
+
           showError('Incorrect email or password. Please try again.');
           emailInput.classList.add('invalid');
           passwordInput.classList.add('invalid');
@@ -332,7 +397,7 @@
           return;
         }
 
-        // ── Verify staff profile & store session ──────────
+        // Verify staff profile & store session
         const { data: profile } = await _sb
           .from('profiles')
           .select('role, first_name, last_name')
@@ -342,7 +407,6 @@
         const role = profile?.role || (email.toLowerCase().includes('admin') ? 'admin' : 'teacher');
         const staffName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || data.user.email.split('@')[0];
 
-        // Store session for immediate availability across the dashboard
         localStorage.setItem('hanaqaad_admin_session', JSON.stringify({
           id: data.user.id,
           email: data.user.email,
@@ -351,7 +415,6 @@
           loginTime: new Date().toISOString()
         }));
 
-        // Redirect to dashboard
         window.location.replace('dashboard.html');
 
       } catch (err) {

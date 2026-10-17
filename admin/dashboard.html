@@ -881,12 +881,25 @@
             <span class="field-error" id="rPhoneErr"></span>
           </div>
           <div class="form-group">
-            <label for="rProgram">Program *</label>
-            <select id="rProgram" required>
-              <option value="" disabled selected>Select program…</option>
-            </select>
-            <span class="field-error" id="rProgramErr"></span>
+            <label for="rAddress">Address / Location</label>
+            <input type="text" id="rAddress" placeholder="Berbera, Somaliland" />
           </div>
+        </div>
+
+        <!-- Multi-Program Selection (1, 2, or more programs) -->
+        <div class="form-group" style="margin-bottom:1.15rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">
+            <label style="font-size:0.8125rem;font-weight:700;color:var(--text-dark)">
+              Programs / Koorsooyinka * 
+              <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">(Waxa aad u assign garayn kartaa 2 program ama ka badan)</span>
+            </label>
+            <span id="selectedProgramsBadge" class="selected-programs-badge">0 selected</span>
+          </div>
+          <div id="rProgramsGrid" class="programs-multi-grid">
+            <!-- Populated dynamically with program checkboxes -->
+          </div>
+          <input type="hidden" id="rProgram" />
+          <span class="field-error" id="rProgramErr"></span>
         </div>
 
         <!-- Fee Amount row with Free toggle -->
@@ -1072,7 +1085,7 @@
 
   <!-- ── Add / Edit Teacher Modal ── -->
   <div class="modal-overlay" id="teacherModal" role="dialog" aria-modal="true" aria-labelledby="teacherModalTitle">
-    <div class="modal">
+    <div class="modal" style="max-width:480px">
       <div class="modal-header">
         <h2 id="teacherModalTitle">Add Teacher Account</h2>
         <button class="modal-close" data-close="teacherModal" aria-label="Close modal">
@@ -1082,37 +1095,30 @@
         </button>
       </div>
       <div class="modal-body">
+        <div class="card" style="background:#f0fdf4;border:1px solid #bbf7d0;padding:0.75rem 1rem;margin-bottom:1.15rem;border-radius:var(--radius-md)">
+          <p style="font-size:0.8125rem;color:#166534;margin:0;line-height:1.4">
+            <strong>Sameynta Account-ka Macalinka:</strong> Xogta laga rabo waa <strong>Magaca</strong> iyo <strong>Lambarka Telefoonka</strong> oo keliya. Macalinku wuxuu nidaamka ku gali doonaa lambarkiisa taleefanka.
+          </p>
+        </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="tFirstName">First Name *</label>
+            <label for="tFirstName">First Name / Magaca Hore *</label>
             <input type="text" id="tFirstName" placeholder="Faadumo" required />
             <span class="field-error" id="tFirstNameErr"></span>
           </div>
           <div class="form-group">
-            <label for="tLastName">Last Name *</label>
+            <label for="tLastName">Last Name / Magaca Aabbaha *</label>
             <input type="text" id="tLastName" placeholder="Warsame" required />
             <span class="field-error" id="tLastNameErr"></span>
           </div>
         </div>
         <div class="form-group">
-          <label for="tEmail">Login Email *</label>
-          <input type="email" id="tEmail" placeholder="teacher@hanaqaad.edu" required />
-          <span class="field-error" id="tEmailErr"></span>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="tPassword">Temporary Password *</label>
-            <input type="text" id="tPassword" placeholder="e.g. Teacher@2026" required />
-            <span class="field-error" id="tPasswordErr"></span>
-          </div>
-          <div class="form-group">
-            <label for="tPhone">Phone (Optional)</label>
-            <input type="tel" id="tPhone" placeholder="+252 63 4xxxxxx" />
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="tSubject">Subject / Department</label>
-          <input type="text" id="tSubject" placeholder="e.g. Computer Literacy, English, Mathematics, Arabic" />
+          <label for="tPhone">Phone Number / Lambarka Telefoonka *</label>
+          <input type="tel" id="tPhone" placeholder="+252 63 4284015" required />
+          <span class="field-error" id="tPhoneErr"></span>
+          <span style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;display:block">
+            Lambarkan taleefanka ayaa u noqon doona macalinka aqoonsiga (Login) uu nidaamka ku galo.
+          </span>
         </div>
         <input type="hidden" id="tTeacherId" />
       </div>

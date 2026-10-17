@@ -143,10 +143,15 @@ const SupabaseDB = {
         localStorage.setItem(this.KEYS.EXAMS, JSON.stringify(examData));
       }
 
-      // Sync teachers (from profiles table where role='teacher')
-      const { data: profiles, error: profErr } = await this.client.from('profiles').select('*').eq('role', 'teacher');
-      if (!profErr && profiles) {
-        localStorage.setItem(this.KEYS.TEACHERS, JSON.stringify(profiles));
+      // Sync teachers (from teachers table or profiles table where role='teacher')
+      const { data: tData, error: tErr } = await this.client.from('teachers').select('*');
+      if (!tErr && tData && tData.length > 0) {
+        localStorage.setItem(this.KEYS.TEACHERS, JSON.stringify(tData));
+      } else {
+        const { data: profiles, error: profErr } = await this.client.from('profiles').select('*').eq('role', 'teacher');
+        if (!profErr && profiles) {
+          localStorage.setItem(this.KEYS.TEACHERS, JSON.stringify(profiles));
+        }
       }
 
       // Update Live Status Badge
@@ -233,12 +238,44 @@ const SupabaseDB = {
     return true;
   },
   getProgramLabel(key) {
-    const prog = this.getPrograms().find(p => p.key === key);
-    return prog ? prog.label : (key || '').toUpperCase();
+    if (!key) return '—';
+    let keys = [];
+    if (Array.isArray(key)) {
+      keys = key;
+    } else if (typeof key === 'string') {
+      keys = key.split(',').map(k => k.trim()).filter(Boolean);
+    }
+    if (keys.length === 0) return '—';
+    return keys.map(k => {
+      const prog = this.getPrograms().find(p => p.key.toLowerCase() === k.toLowerCase());
+      return prog ? prog.label : k.toUpperCase();
+    }).join(', ');
+  },
+  getProgramBadges(key) {
+    if (!key) return '<span class="badge badge-gray">—</span>';
+    let keys = [];
+    if (Array.isArray(key)) {
+      keys = key;
+    } else if (typeof key === 'string') {
+      keys = key.split(',').map(k => k.trim()).filter(Boolean);
+    }
+    if (keys.length === 0) return '<span class="badge badge-gray">—</span>';
+    return keys.map(k => {
+      const prog = this.getPrograms().find(p => p.key.toLowerCase() === k.toLowerCase());
+      const label = prog ? prog.label : k.toUpperCase();
+      return `<span class="badge badge-blue" style="margin:2px 3px 2px 0;display:inline-block">${label}</span>`;
+    }).join('');
   },
   getProgramFee(key) {
-    const prog = this.getPrograms().find(p => p.key === key);
-    return prog ? prog.fee : 100;
+    if (!key) return 0;
+    let keys = [];
+    if (Array.isArray(key)) keys = key;
+    else if (typeof key === 'string') keys = key.split(',').map(k => k.trim()).filter(Boolean);
+    if (keys.length === 0) return 0;
+    return keys.reduce((sum, k) => {
+      const prog = this.getPrograms().find(p => p.key.toLowerCase() === k.toLowerCase());
+      return sum + (prog ? Number(prog.fee || 0) : 0);
+    }, 0);
   },
 
   // ── Students
@@ -252,18 +289,19 @@ const SupabaseDB = {
   saveStudent(student) {
     const list = this.getStudents();
     let saved = null;
-    if (student.id && !student.id.startsWith('s_temp_')) {
-      const idx = list.findIndex(s => s.id === student.id);
-      if (idx !== -1) {
-        list[idx] = { ...list[idx], ...student, updated_at: new Date().toISOString() };
-        saved = list[idx];
-      }
+    let idx = -1;
+    if (student.id) {
+      idx = list.findIndex(s => s.id === student.id || (s.student_id && student.student_id && s.student_id === student.student_id));
+    }
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...student, updated_at: new Date().toISOString() };
+      saved = list[idx];
     } else {
-      const newId = student.id || 's_' + Date.now();
+      const newId = student.id && !student.id.startsWith('s_temp_') ? student.id : ('s_' + Date.now());
       saved = {
         ...student,
         id: newId,
-        created_at: new Date().toISOString(),
+        created_at: student.created_at || new Date().toISOString(),
       };
       list.unshift(saved);
       this.logActivity(`Student enrolled: ${saved.first_name} ${saved.last_name}`, `ID: ${saved.student_id} · ${this.getProgramLabel(saved.program)}`, 'activity-dot-blue');
@@ -276,21 +314,24 @@ const SupabaseDB = {
         last_name: saved.last_name,
         student_id: saved.student_id,
         phone: saved.phone,
-        program: saved.program,
+        program: Array.isArray(saved.programs) ? saved.programs.join(', ') : (saved.program || ''),
         status: saved.status || 'active',
         security_pin: saved.pin || saved.security_pin || null,
         fee_amount: Number(saved.fee_amount || 0),
         is_free: Boolean(saved.is_free),
+        address: saved.address || null,
         notes: saved.notes || null,
       };
-      if (saved.id && !saved.id.startsWith('s_')) payload.id = saved.id;
+      const isUUID = saved.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved.id);
+      if (isUUID) payload.id = saved.id;
 
-      this.client.from('students').upsert([payload]).select().then(res => {
+      this.client.from('students').upsert([payload], { onConflict: 'student_id' }).select().then(res => {
         if (!res.error && res.data && res.data[0]) {
-          const idx = list.findIndex(s => s.student_id === saved.student_id);
-          if (idx !== -1) {
-            list[idx].id = res.data[0].id;
-            localStorage.setItem(this.KEYS.STUDENTS, JSON.stringify(list));
+          const freshList = this.getStudents();
+          const target = freshList.find(s => s.student_id === saved.student_id);
+          if (target) {
+            target.id = res.data[0].id;
+            localStorage.setItem(this.KEYS.STUDENTS, JSON.stringify(freshList));
           }
         } else if (res.error) {
           console.warn('Supabase student save error:', res.error);
@@ -358,20 +399,23 @@ const SupabaseDB = {
   },
   saveRegistration(reg) {
     const list = this.getRegistrations();
+    let idx = -1;
     if (reg.id) {
-      const idx = list.findIndex(r => r.id === reg.id);
-      if (idx !== -1) {
-        list[idx] = { ...list[idx], ...reg, updated_at: new Date().toISOString() };
-      }
+      idx = list.findIndex(r => r.id === reg.id || (r.student_id && reg.student_id && r.student_id === reg.student_id));
+    }
+    let saved = null;
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...reg, updated_at: new Date().toISOString() };
+      saved = list[idx];
     } else {
-      const newReg = {
+      saved = {
         ...reg,
-        id: 'r_' + Date.now(),
-        created_at: new Date().toISOString(),
+        id: reg.id || ('r_' + Date.now()),
+        created_at: reg.created_at || new Date().toISOString(),
       };
-      list.unshift(newReg);
-      const feeNote = newReg.is_free ? 'FREE Scholarship' : `Fee: $${newReg.fee_amount}`;
-      this.logActivity(`New student registered: ${newReg.first_name} ${newReg.last_name}`, `ID: ${newReg.student_id} · ${feeNote}`, 'activity-dot-blue');
+      list.unshift(saved);
+      const feeNote = saved.is_free ? 'FREE Scholarship' : `Fee: $${saved.fee_amount}`;
+      this.logActivity(`New student registered: ${saved.first_name} ${saved.last_name}`, `ID: ${saved.student_id} · ${feeNote}`, 'activity-dot-blue');
     }
     localStorage.setItem(this.KEYS.REGISTRATIONS, JSON.stringify(list));
     return list;
@@ -520,57 +564,49 @@ const SupabaseDB = {
   },
   async saveTeacher(teacher) {
     const list = this.getTeachers();
+    const cleanPhone = (teacher.phone || '').replace(/\D/g, '');
+    let saved = null;
+    let idx = -1;
     if (teacher.id) {
-      const idx = list.findIndex(t => t.id === teacher.id);
-      if (idx !== -1) {
-        list[idx] = { ...list[idx], ...teacher, updated_at: new Date().toISOString() };
-      }
+      idx = list.findIndex(t => t.id === teacher.id);
+    }
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...teacher, updated_at: new Date().toISOString() };
+      saved = list[idx];
     } else {
-      if (list.find(t => t.email.toLowerCase() === teacher.email.toLowerCase())) {
-        return { error: 'A teacher with this email already exists.' };
+      const exists = list.find(t => (t.phone || '').replace(/\D/g, '') === cleanPhone);
+      if (exists) {
+        return { error: 'Macalin leh lambarkan taleefanka ayaa horay u jiray (Phone already registered).' };
       }
-      const newTeacher = {
+      saved = {
         ...teacher,
-        id: 't_' + Date.now(),
+        id: teacher.id || ('t_' + Date.now()),
+        first_name: teacher.first_name,
+        last_name: teacher.last_name,
+        phone: teacher.phone,
+        email: teacher.email || `teacher_${cleanPhone}@hanaqaad.edu`,
         role: 'teacher',
         created_at: new Date().toISOString(),
       };
-      list.push(newTeacher);
-      this.logActivity(`Teacher account created: ${newTeacher.first_name} ${newTeacher.last_name}`, `Email: ${newTeacher.email}`, 'activity-dot-blue');
+      list.push(saved);
+      this.logActivity(`Teacher account created: ${saved.first_name} ${saved.last_name}`, `Phone: ${saved.phone}`, 'activity-dot-blue');
     }
     localStorage.setItem(this.KEYS.TEACHERS, JSON.stringify(list));
 
-    // Create teacher in Supabase Auth and Profiles table
-    if (this.client && teacher.password) {
+    // Also sync to Supabase teachers table if live
+    if (this.client && saved) {
       try {
-        const { data, error } = await this.client.auth.signUp({
-          email: teacher.email,
-          password: teacher.password,
-          options: {
-            data: {
-              role: 'teacher',
-              first_name: teacher.first_name,
-              last_name: teacher.last_name,
-              phone: teacher.phone || ''
-            }
-          }
-        });
-        if (error) {
-          console.warn('Supabase teacher signUp warning:', error.message);
-        } else if (data && data.user) {
-          await this.client.from('profiles').upsert([{
-            id: data.user.id,
-            role: 'teacher',
-            first_name: teacher.first_name,
-            last_name: teacher.last_name,
-            phone: teacher.phone || null
-          }]);
-        }
+        await this.client.from('teachers').upsert([{
+          first_name: saved.first_name,
+          last_name: saved.last_name,
+          phone: saved.phone,
+          role: 'teacher'
+        }], { onConflict: 'phone' });
       } catch (err) {
-        console.warn('Supabase teacher creation error:', err);
+        console.warn('Supabase teacher sync notice:', err);
       }
     }
-    return { ok: true };
+    return { ok: true, teacher: saved };
   },
   deleteTeacher(id) {
     let list = this.getTeachers();
@@ -1105,7 +1141,7 @@ function loadOverview() {
           </div>
         </td>
         <td><code style="font-size:0.75rem;background:var(--gray-100);padding:2px 6px;border-radius:4px;font-weight:700">${s.student_id || '—'}</code></td>
-        <td><span class="badge badge-blue">${LocalDB.getProgramLabel(s.program)}</span></td>
+        <td>${LocalDB.getProgramBadges(s.program || s.programs)}</td>
         <td>${statusBadge(s.status || 'active')}</td>
       </tr>
     `).join('');
@@ -1164,7 +1200,7 @@ function renderStudentsTable(students) {
         </div>
       </td>
       <td><code style="font-size:0.85rem;background:var(--blue-50);color:var(--primary);padding:3px 8px;border-radius:4px;font-weight:800">${s.student_id || '—'}</code></td>
-      <td><span class="badge badge-blue">${LocalDB.getProgramLabel(s.program)}</span></td>
+      <td>${LocalDB.getProgramBadges(s.program || s.programs)}</td>
       <td><strong>${s.phone || '—'}</strong></td>
       <td><code style="font-size:0.78rem;background:var(--gray-100);padding:2px 6px;border-radius:4px;font-weight:700">${s.pin || '1234'}</code></td>
       <td>${statusBadge(s.status || 'active')}</td>
@@ -1195,7 +1231,8 @@ function filterStudentsTable() {
 
   const filtered = allStudents.filter(s => {
     const textMatch   = !q || `${s.first_name} ${s.last_name} ${s.student_id || ''} ${s.phone || ''}`.toLowerCase().includes(q);
-    const progMatch   = !prog || s.program === prog;
+    const sProgs      = Array.isArray(s.programs) ? s.programs : (s.program ? s.program.split(',').map(p=>p.trim()) : []);
+    const progMatch   = !prog || sProgs.includes(prog);
     const statusMatch = !status || (s.status || 'active') === status;
     return textMatch && progMatch && statusMatch;
   });
@@ -1220,7 +1257,10 @@ function loadAttendance() {
   const progFilter = document.getElementById('attProgram').value;
 
   const students         = LocalDB.getStudents().filter(s => s.status === 'active');
-  const filteredStudents = progFilter ? students.filter(s => s.program === progFilter) : students;
+  const filteredStudents = progFilter ? students.filter(s => {
+    const sProgs = Array.isArray(s.programs) ? s.programs : (s.program ? s.program.split(',').map(p=>p.trim()) : []);
+    return sProgs.includes(progFilter);
+  }) : students;
 
   const savedDateMap = LocalDB.getDateAttendance(date);
   currentAttendanceMap = {};
@@ -1366,7 +1406,7 @@ function renderRegistrationsTable(regs) {
         </div>
       </td>
       <td><code style="font-size:0.82rem;background:var(--blue-50);color:var(--primary);padding:2px 8px;border-radius:4px;font-weight:800">${r.student_id || '—'}</code></td>
-      <td><span class="badge badge-blue">${LocalDB.getProgramLabel(r.program)}</span></td>
+      <td>${LocalDB.getProgramBadges(r.program || r.programs)}</td>
       <td><strong>${r.phone || '—'}</strong></td>
       <td>
         ${r.is_free
@@ -1403,7 +1443,8 @@ function filterRegistrationsTable() {
 
   const filtered = allRegistrations.filter(r => {
     const textMatch   = !q || `${r.first_name} ${r.last_name} ${r.phone || ''} ${r.student_id || ''}`.toLowerCase().includes(q);
-    const progMatch   = !prog || r.program === prog;
+    const rProgs      = Array.isArray(r.programs) ? r.programs : (r.program ? r.program.split(',').map(p=>p.trim()) : []);
+    const progMatch   = !prog || rProgs.includes(prog);
     const statusMatch = !status || r.status === status;
     return textMatch && progMatch && statusMatch;
   });
@@ -1411,9 +1452,66 @@ function filterRegistrationsTable() {
   renderRegistrationsTable(filtered);
 }
 
+function renderRegistrationProgramCheckboxes(selectedKeys = []) {
+  const container = document.getElementById('rProgramsGrid');
+  if (!container) return;
+
+  const programs = LocalDB.getPrograms();
+  const normalizedSelected = Array.isArray(selectedKeys)
+    ? selectedKeys.map(k => String(k).trim().toLowerCase())
+    : String(selectedKeys || '').split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+
+  container.innerHTML = programs.map(prog => {
+    const isChecked = normalizedSelected.includes(prog.key.toLowerCase());
+    return `
+      <label class="program-choice-card ${isChecked ? 'selected' : ''}" id="progChoice-${prog.key}">
+        <input type="checkbox" name="rPrograms" value="${prog.key}" data-fee="${prog.fee || 0}" ${isChecked ? 'checked' : ''} onchange="handleProgramCheckboxChange(this)" />
+        <div class="program-choice-content">
+          <span class="program-choice-title">${prog.label}</span>
+          <span class="program-choice-fee">$${prog.fee || 0} USD</span>
+        </div>
+      </label>
+    `;
+  }).join('');
+
+  updateSelectedProgramsSummary(false);
+}
+
+function handleProgramCheckboxChange(cb) {
+  const card = document.getElementById(`progChoice-${cb.value}`);
+  if (card) {
+    card.classList.toggle('selected', cb.checked);
+  }
+  updateSelectedProgramsSummary(true);
+}
+
+function updateSelectedProgramsSummary(recalcFee = true) {
+  const checkedBoxes = Array.from(document.querySelectorAll('input[name="rPrograms"]:checked'));
+  const countBadge = document.getElementById('selectedProgramsBadge');
+  if (countBadge) {
+    countBadge.textContent = `${checkedBoxes.length} selected`;
+  }
+
+  const hiddenInput = document.getElementById('rProgram');
+  if (hiddenInput) {
+    hiddenInput.value = checkedBoxes.map(cb => cb.value).join(', ');
+  }
+
+  const isFree = document.getElementById('rFree')?.checked;
+  const feeInput = document.getElementById('rFeeAmount');
+  if (feeInput && !isFree && recalcFee) {
+    const totalFee = checkedBoxes.reduce((sum, cb) => sum + (parseFloat(cb.dataset.fee) || 0), 0);
+    feeInput.value = totalFee;
+  }
+
+  const errEl = document.getElementById('rProgramErr');
+  if (errEl && checkedBoxes.length > 0) errEl.textContent = '';
+}
+
 function handleFreeToggle() {
   const isFree = document.getElementById('rFree').checked;
   const feeInput = document.getElementById('rFeeAmount');
+  if (!feeInput) return;
   if (isFree) {
     feeInput.value = 0;
     feeInput.disabled = true;
@@ -1421,8 +1519,9 @@ function handleFreeToggle() {
   } else {
     feeInput.disabled = false;
     feeInput.style.opacity = '1';
-    const prog = document.getElementById('rProgram').value;
-    if (prog) feeInput.value = LocalDB.getProgramFee(prog);
+    const checkedBoxes = Array.from(document.querySelectorAll('input[name="rPrograms"]:checked'));
+    const totalFee = checkedBoxes.reduce((sum, cb) => sum + (parseFloat(cb.dataset.fee) || 0), 0);
+    feeInput.value = totalFee;
   }
 }
 
@@ -1430,26 +1529,26 @@ function openRegistrationModal(reg = null) {
   editingRegistrationId = reg?.id || null;
   document.getElementById('registrationModalTitle').textContent = reg ? 'Edit Registration' : 'Student Registration';
 
-  // Fill programs
-  fillProgramSelect(document.getElementById('rProgram'), false, reg?.program || '');
+  // Render multi-program checkboxes with selected programs
+  const regPrograms = reg?.programs || reg?.program || '';
+  renderRegistrationProgramCheckboxes(regPrograms);
 
   document.getElementById('rFirstName').value      = reg?.first_name || '';
   document.getElementById('rLastName').value       = reg?.last_name  || '';
   document.getElementById('rPhone').value          = reg?.phone      || '';
   if (document.getElementById('rAddress')) document.getElementById('rAddress').value = reg?.address || '';
-  document.getElementById('rFeeAmount').value      = reg?.fee_amount !== undefined ? reg.fee_amount : '';
   document.getElementById('rFree').checked         = reg?.is_free    || false;
   document.getElementById('rRegistrationId').value = reg?.id         || '';
 
-  // Generate PIN if new
-  if (!reg || !reg.pin) {
-    generateRandomPin();
+  // Fee calculation / display
+  const feeInput = document.getElementById('rFeeAmount');
+  if (reg?.fee_amount !== undefined && reg?.fee_amount !== '') {
+    feeInput.value = reg.fee_amount;
   } else {
-    document.getElementById('rPin').value = reg.pin;
+    const checkedBoxes = Array.from(document.querySelectorAll('input[name="rPrograms"]:checked'));
+    feeInput.value = checkedBoxes.reduce((sum, cb) => sum + (parseFloat(cb.dataset.fee) || 0), 0);
   }
 
-  // Handle free toggle state
-  const feeInput = document.getElementById('rFeeAmount');
   if (reg?.is_free) {
     feeInput.disabled = true;
     feeInput.style.opacity = '0.5';
@@ -1458,8 +1557,16 @@ function openRegistrationModal(reg = null) {
     feeInput.style.opacity = '1';
   }
 
+  // Generate PIN if new
+  if (!reg || !reg.pin) {
+    generateRandomPin();
+  } else {
+    document.getElementById('rPin').value = reg.pin;
+  }
+
   ['rFirstNameErr', 'rLastNameErr', 'rPhoneErr', 'rProgramErr'].forEach(id => {
-    document.getElementById(id).textContent = '';
+    const el = document.getElementById(id);
+    if (el) el.textContent = '';
   });
 
   openModal('registrationModal');
@@ -1471,7 +1578,7 @@ function editRegistration(id) {
 }
 
 function editRegistrationByStudentId(studentId) {
-  const student = LocalDB.getStudents().find(s => s.id === studentId);
+  const student = LocalDB.getStudents().find(s => s.id === studentId || s.student_id === studentId);
   if (student) {
     openRegistrationModal({
       id: student.id,
@@ -1479,9 +1586,10 @@ function editRegistrationByStudentId(studentId) {
       last_name:  student.last_name,
       phone:      student.phone,
       program:    student.program,
-      pin:        student.pin,
+      programs:   student.programs,
+      pin:        student.pin || student.security_pin,
       address:    student.address,
-      fee_amount: student.fee_amount || LocalDB.getProgramFee(student.program),
+      fee_amount: student.fee_amount !== undefined ? student.fee_amount : LocalDB.getProgramFee(student.program),
       is_free:    student.is_free || false,
       student_id: student.student_id,
       status:     student.status || 'active',
@@ -1493,19 +1601,27 @@ function saveRegistration() {
   const firstName = document.getElementById('rFirstName').value.trim();
   const lastName  = document.getElementById('rLastName').value.trim();
   const phone     = document.getElementById('rPhone').value.trim();
-  const program   = document.getElementById('rProgram').value;
   const pin       = document.getElementById('rPin').value.trim() || generateRandomPin().toString();
   const addressEl = document.getElementById('rAddress');
-  const address   = addressEl ? addressEl.value.trim() : '';
+  const address   = addressEl ? addressEl.value.trim() : 'Berbera, Somaliland';
   const isFree    = document.getElementById('rFree').checked;
   const feeAmount = isFree ? 0 : (parseFloat(document.getElementById('rFeeAmount').value) || 0);
+
+  // Selected multi-programs
+  const selectedBoxes = Array.from(document.querySelectorAll('input[name="rPrograms"]:checked'));
+  const selectedPrograms = selectedBoxes.map(cb => cb.value);
 
   let valid = true;
   if (!firstName) { document.getElementById('rFirstNameErr').textContent = 'Required'; valid = false; }
   if (!lastName)  { document.getElementById('rLastNameErr').textContent  = 'Required'; valid = false; }
   if (!phone)     { document.getElementById('rPhoneErr').textContent     = 'Required'; valid = false; }
-  if (!program)   { document.getElementById('rProgramErr').textContent   = 'Select program'; valid = false; }
+  if (selectedPrograms.length === 0) {
+    document.getElementById('rProgramErr').textContent = 'Fadlan xulo ugu yaraan 1 program (Select at least 1 program)';
+    valid = false;
+  }
   if (!valid) return;
+
+  const programsString = selectedPrograms.join(', ');
 
   let assignedStudentId;
   let studentRecordId;
@@ -1529,7 +1645,8 @@ function saveRegistration() {
     first_name: firstName,
     last_name:  lastName,
     phone,
-    program,
+    program:    programsString,
+    programs:   selectedPrograms,
     pin,
     address:    address || 'Berbera, Somaliland',
     status:     'active',
@@ -1545,7 +1662,8 @@ function saveRegistration() {
     first_name:  firstName,
     last_name:   lastName,
     phone,
-    program,
+    program:     programsString,
+    programs:    selectedPrograms,
     pin,
     address,
     fee_amount:  feeAmount,
@@ -1563,7 +1681,7 @@ function saveRegistration() {
       amount_paid:    0,
       payment_date:   new Date().toISOString().slice(0, 10),
       payment_method: 'zaad',
-      notes: isFree ? 'Full scholarship (Waived fee)' : `Initial tuition registered by ${currentUserName}`,
+      notes: isFree ? 'Full scholarship (Waived fee)' : `Initial tuition (${programsString}) registered by ${currentUserName}`,
     });
   }
 
@@ -1957,8 +2075,8 @@ function renderTeacherGrid(teachers) {
     grid.innerHTML = `
       <div style="grid-column:1/-1;text-align:center;padding:3rem 1rem;color:var(--text-muted)">
         <div style="font-size:2.5rem;margin-bottom:0.75rem">👩‍🏫</div>
-        <h3 style="font-size:1rem;font-weight:700;color:var(--text-dark);margin-bottom:0.35rem">No teacher accounts created yet</h3>
-        <p style="font-size:0.85rem">Click "+ Add Teacher" to create the first teacher account.</p>
+        <h3 style="font-size:1rem;font-weight:700;color:var(--text-dark);margin-bottom:0.35rem">Weli ma jiraan account-yo macalimiin</h3>
+        <p style="font-size:0.85rem">Guji "+ Add Teacher" si aad u sameyso account-ka macalinka (Magaca iyo Telefoonka kaliya).</p>
       </div>`;
     return;
   }
@@ -1968,9 +2086,11 @@ function renderTeacherGrid(teachers) {
       <div class="user-avatar">${getInitials(t.first_name, t.last_name)}</div>
       <div class="teacher-card-info">
         <strong>${t.first_name} ${t.last_name}</strong>
-        <span>${t.email}</span>
-        ${t.subject ? `<span style="display:block;margin-top:0.2rem;font-size:0.75rem;color:var(--primary);font-weight:600">${t.subject}</span>` : ''}
-        ${t.phone ? `<span style="display:block;font-size:0.75rem;color:var(--text-muted)">${t.phone}</span>` : ''}
+        <span style="display:flex;align-items:center;gap:0.35rem;margin-top:0.25rem;font-size:0.85rem;color:var(--primary);font-weight:700">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+          ${t.phone || '—'}
+        </span>
+        <span style="display:block;font-size:0.75rem;color:var(--text-muted);margin-top:0.2rem">Login ID: <code>${t.phone || 'Phone'}</code></span>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;flex-shrink:0">
         <span class="role-tag role-teacher">Teacher</span>
@@ -1997,16 +2117,14 @@ function renderTeacherGrid(teachers) {
 function openTeacherModal(teacher = null) {
   editingTeacherId = teacher?.id || null;
   document.getElementById('teacherModalTitle').textContent = teacher ? 'Edit Teacher Account' : 'Add Teacher Account';
-  document.getElementById('tFirstName').value  = teacher?.first_name || '';
-  document.getElementById('tLastName').value   = teacher?.last_name  || '';
-  document.getElementById('tEmail').value      = teacher?.email      || '';
-  document.getElementById('tPassword').value   = teacher?.password   || '';
-  document.getElementById('tPhone').value      = teacher?.phone      || '';
-  document.getElementById('tSubject').value    = teacher?.subject    || '';
-  document.getElementById('tTeacherId').value  = teacher?.id         || '';
+  document.getElementById('tFirstName').value = teacher?.first_name || '';
+  document.getElementById('tLastName').value  = teacher?.last_name  || '';
+  document.getElementById('tPhone').value     = teacher?.phone      || '';
+  document.getElementById('tTeacherId').value = teacher?.id         || '';
 
-  ['tFirstNameErr', 'tLastNameErr', 'tEmailErr', 'tPasswordErr'].forEach(id => {
-    document.getElementById(id).textContent = '';
+  ['tFirstNameErr', 'tLastNameErr', 'tPhoneErr'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '';
   });
 
   openModal('teacherModal');
@@ -2017,43 +2135,34 @@ function editTeacher(id) {
   if (teacher) openTeacherModal(teacher);
 }
 
-function saveTeacher() {
+async function saveTeacher() {
   const firstName = document.getElementById('tFirstName').value.trim();
   const lastName  = document.getElementById('tLastName').value.trim();
-  const email     = document.getElementById('tEmail').value.trim().toLowerCase();
-  const password  = document.getElementById('tPassword').value.trim();
+  const phone     = document.getElementById('tPhone').value.trim();
 
   let valid = true;
-  if (!firstName) { document.getElementById('tFirstNameErr').textContent = 'Required'; valid = false; }
-  if (!lastName)  { document.getElementById('tLastNameErr').textContent  = 'Required'; valid = false; }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    document.getElementById('tEmailErr').textContent = 'Valid email required'; valid = false;
-  }
-  if (!editingTeacherId && !password) {
-    document.getElementById('tPasswordErr').textContent = 'Required for new teacher'; valid = false;
-  }
+  if (!firstName) { document.getElementById('tFirstNameErr').textContent = 'Magaca hore waa qasab (Required)'; valid = false; }
+  if (!lastName)  { document.getElementById('tLastNameErr').textContent  = 'Magaca dambe waa qasab (Required)'; valid = false; }
+  if (!phone)     { document.getElementById('tPhoneErr').textContent     = 'Lambarka taleefanka waa qasab (Required)'; valid = false; }
   if (!valid) return;
 
   const payload = {
     first_name: firstName,
     last_name:  lastName,
-    email,
-    password:   password || undefined,
-    phone:      document.getElementById('tPhone').value.trim()   || null,
-    subject:    document.getElementById('tSubject').value.trim() || null,
+    phone:      phone,
   };
 
   if (editingTeacherId) payload.id = editingTeacherId;
 
-  const result = LocalDB.saveTeacher(payload);
+  const result = await LocalDB.saveTeacher(payload);
 
   if (result && result.error) {
-    document.getElementById('tEmailErr').textContent = result.error;
+    document.getElementById('tPhoneErr').textContent = result.error;
     return;
   }
 
   closeModal('teacherModal');
-  showToast(editingTeacherId ? 'Teacher account updated!' : `Teacher account created! Login: ${email}`, 'success');
+  showToast(editingTeacherId ? 'Xogta macalinka waa la cusbooneysiiyay!' : `Account-ka macalinka (${firstName} ${lastName}) si guul leh ayaa loo sameeyay! Wuxuu ku gali karaa: ${phone}`, 'success');
   loadTeachers();
   if (currentView === 'overview') loadOverview();
 }
@@ -2208,6 +2317,7 @@ window.openRegistrationModal  = openRegistrationModal;
 window.editRegistration       = editRegistration;
 window.editRegistrationByStudentId = editRegistrationByStudentId;
 window.handleFreeToggle       = handleFreeToggle;
+window.handleProgramCheckboxChange = handleProgramCheckboxChange;
 window.generateRandomPin      = generateRandomPin;
 window.openExamModal          = openExamModal;
 window.editExam               = editExam;
