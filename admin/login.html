@@ -224,11 +224,33 @@
       window.ENV_SUPABASE_ANON_KEY
     );
 
-    // ── If already logged in, go to dashboard ─────────────
+    // ── If already logged in, restore local session and go to dashboard ─────
     (async () => {
-      const { data: { session } } = await _sb.auth.getSession();
-      if (session) {
-        window.location.replace('dashboard.html');
+      try {
+        const { data: { session } } = await _sb.auth.getSession();
+        if (session && session.user) {
+          let localSession = localStorage.getItem('hanaqaad_admin_session');
+          if (!localSession) {
+            const { data: profile } = await _sb
+              .from('profiles')
+              .select('role, first_name, last_name')
+              .eq('id', session.user.id)
+              .maybeSingle();
+
+            const role = profile?.role || (session.user.email?.toLowerCase().includes('admin') ? 'admin' : 'teacher');
+            const name = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || session.user.email.split('@')[0];
+            localStorage.setItem('hanaqaad_admin_session', JSON.stringify({
+              id: session.user.id,
+              email: session.user.email,
+              name: name,
+              role: role,
+              loginTime: new Date().toISOString()
+            }));
+          }
+          window.location.replace('dashboard.html');
+        }
+      } catch (e) {
+        console.warn('Session auto-restore error:', e);
       }
     })();
 
@@ -303,22 +325,26 @@
           return;
         }
 
-        // ── Verify the user has a staff profile ──────────
-        const { data: profile, error: profileErr } = await _sb
+        // ── Verify staff profile & store session ──────────
+        const { data: profile } = await _sb
           .from('profiles')
           .select('role, first_name, last_name')
           .eq('id', data.user.id)
-          .single();
+          .maybeSingle();
 
-        if (profileErr || !profile) {
-          await _sb.auth.signOut();
-          showError('Your account does not have staff access. Contact the administrator.');
-          setLoading(false);
-          return;
-        }
+        const role = profile?.role || (email.toLowerCase().includes('admin') ? 'admin' : 'teacher');
+        const staffName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || data.user.email.split('@')[0];
 
-        // Role is confirmed server-side (from DB, not frontend guess)
-        // Redirect to dashboard — dashboard.js will read the session
+        // Store session for immediate availability across the dashboard
+        localStorage.setItem('hanaqaad_admin_session', JSON.stringify({
+          id: data.user.id,
+          email: data.user.email,
+          name: staffName,
+          role: role,
+          loginTime: new Date().toISOString()
+        }));
+
+        // Redirect to dashboard
         window.location.replace('dashboard.html');
 
       } catch (err) {

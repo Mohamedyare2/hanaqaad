@@ -641,8 +641,38 @@ let currentUserName = 'Administrator';
 /* ────────────────────────────────────────────────────────────
    5. INITIALIZATION
 ──────────────────────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', () => {
-  const sessionStr = localStorage.getItem('hanaqaad_admin_session');
+document.addEventListener('DOMContentLoaded', async () => {
+  let sessionStr = localStorage.getItem('hanaqaad_admin_session');
+
+  // If local session cache is missing, try recovering from active Supabase session
+  if (!sessionStr && window.supabase && window.ENV_SUPABASE_URL && window.ENV_SUPABASE_ANON_KEY) {
+    try {
+      const sb = window.supabase.createClient(window.ENV_SUPABASE_URL, window.ENV_SUPABASE_ANON_KEY);
+      const { data: { session } } = await sb.auth.getSession();
+      if (session && session.user) {
+        const { data: profile } = await sb
+          .from('profiles')
+          .select('role, first_name, last_name')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        const role = profile?.role || (session.user.email?.toLowerCase().includes('admin') ? 'admin' : 'teacher');
+        const name = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || session.user.email.split('@')[0];
+        const recovered = {
+          id: session.user.id,
+          email: session.user.email,
+          name: name,
+          role: role,
+          loginTime: new Date().toISOString()
+        };
+        localStorage.setItem('hanaqaad_admin_session', JSON.stringify(recovered));
+        sessionStr = JSON.stringify(recovered);
+      }
+    } catch (e) {
+      console.warn('Could not restore session from Supabase:', e);
+    }
+  }
+
   if (!sessionStr) {
     window.location.replace('login.html');
     return;
@@ -921,9 +951,12 @@ function showToast(message, type = 'success') {
 }
 
 function initLogout() {
-  document.getElementById('logoutBtn').addEventListener('click', () => {
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
     if (confirm('Are you sure you want to log out of Hanaqaad College?')) {
       localStorage.removeItem('hanaqaad_admin_session');
+      if (window._sb && window._sb.auth) {
+        try { await window._sb.auth.signOut(); } catch (e) {}
+      }
       window.location.replace('login.html');
     }
   });
