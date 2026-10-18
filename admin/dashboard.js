@@ -113,10 +113,16 @@ const SupabaseDB = {
         if (typeof populateAllProgramDropdowns === 'function') populateAllProgramDropdowns();
       }
 
-      // Sync students
+      // Sync students — MERGE with local data so freshly-registered students
+      // that haven't synced to Supabase yet are NOT lost on page load.
       const { data: studs, error: studErr } = await this.client.from('students').select('*').order('created_at', { ascending: false });
       if (!studErr && studs) {
-        localStorage.setItem(this.KEYS.STUDENTS, JSON.stringify(studs));
+        const localStudents = JSON.parse(localStorage.getItem(this.KEYS.STUDENTS) || '[]');
+        // Keep any local-only students whose student_id isn't in Supabase yet
+        const supabaseStudentIds = new Set(studs.map(s => s.student_id).filter(Boolean));
+        const localOnly = localStudents.filter(ls => ls.student_id && !supabaseStudentIds.has(ls.student_id));
+        const mergedStudents = [...studs, ...localOnly];
+        localStorage.setItem(this.KEYS.STUDENTS, JSON.stringify(mergedStudents));
         this.isLive = true;
       }
 
@@ -159,7 +165,12 @@ const SupabaseDB = {
       if (text) text.textContent = 'Supabase Connected';
 
       // Refresh current dashboard view with live data
-      if (typeof renderCurrentView === 'function') renderCurrentView();
+      if (typeof loadOverview      === 'function' && currentView === 'overview')     loadOverview();
+      if (typeof loadStudents      === 'function' && currentView === 'students')     loadStudents();
+      if (typeof loadRegistrations === 'function' && currentView === 'registration') loadRegistrations();
+      if (typeof loadFees          === 'function' && currentView === 'fees')         loadFees();
+      if (typeof loadExams         === 'function' && currentView === 'exams')        loadExams();
+      if (typeof loadTeachers      === 'function' && currentView === 'teachers')     loadTeachers();
 
     } catch (err) {
       console.warn('Supabase sync notice:', err);
@@ -1144,7 +1155,12 @@ function loadOverview() {
     : 'No roll recorded today';
 
   // Fee Stats (admin only UI)
-  const totalFees   = fees.reduce((sum, f) => sum + (Number(f.total_fee) || 0), 0);
+  // Expected tuition = per-student fee_amount (covers students with no fee record yet)
+  const totalFees = students.reduce((sum, s) => {
+    if (s.is_free) return sum;
+    const feeRec = fees.find(f => f.student_id === s.id);
+    return sum + (Number(feeRec ? feeRec.total_fee : s.fee_amount) || 0);
+  }, 0);
   const paidFees    = fees.reduce((sum, f) => sum + (Number(f.amount_paid) || 0), 0);
   const fcEl = document.getElementById('statFeesCollected');
   const fsEl = document.getElementById('statFeesSub');
@@ -1198,7 +1214,12 @@ function loadOverview() {
   const overviewFeeOutstandingEl = document.getElementById('overviewFeeOutstanding');
   const overviewFeesTbody = document.getElementById('overviewFeesTbody');
 
-  const totalTuitionSum = fees.reduce((sum, f) => sum + (Number(f.total_fee) || 0), 0);
+  // Derive expected tuition from each student's own fee_amount (covers students with no fee record yet)
+  const totalTuitionSum = students.reduce((sum, s) => {
+    if (s.is_free) return sum;
+    const feeRec = fees.find(f => f.student_id === s.id);
+    return sum + (Number(feeRec ? feeRec.total_fee : s.fee_amount) || 0);
+  }, 0);
   const totalPaidSum    = fees.reduce((sum, f) => sum + (Number(f.amount_paid) || 0), 0);
   const totalBalance    = Math.max(0, totalTuitionSum - totalPaidSum);
 
