@@ -1332,6 +1332,7 @@ function initStudentEvents() {
 
 function loadStudents() {
   allStudents = LocalDB.getStudents();
+  allFees     = LocalDB.getFees();          // Always refresh fees so fee status is up-to-date
   document.getElementById('sidebarStudentCount').textContent = allStudents.length;
   renderStudentsTable(allStudents);
 }
@@ -1872,11 +1873,18 @@ function saveRegistration() {
   }
 
   closeModal('registrationModal');
-  showToast(`🎉 Registration saved! Student ID: ${assignedStudentId} (PIN: ${pin})`, 'success');
+  showToast(`🎉 Diiwaangelintii guul leh! Student ID: ${assignedStudentId} · PIN: ${pin}`, 'success');
 
-  loadRegistrations();
-  loadStudents();
-  if (currentView === 'overview') loadOverview();
+  // Refresh all related global state from localStorage immediately
+  allStudents = LocalDB.getStudents();
+  allFees     = LocalDB.getFees();
+  allRegistrations = LocalDB.getRegistrations();
+
+  // Always refresh overview counters
+  loadOverview();
+
+  // Switch to Students Directory so the user sees the new student immediately
+  switchView('students');
 }
 
 /* ====================================================================
