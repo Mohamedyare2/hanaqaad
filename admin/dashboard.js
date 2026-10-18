@@ -501,12 +501,17 @@ const SupabaseDB = {
   saveFee(fee) {
     const list = this.getFees();
     let saved = null;
-    if (fee.id && !fee.id.startsWith('f_')) {
-      const idx = list.findIndex(f => f.id === fee.id);
-      if (idx !== -1) {
-        list[idx] = { ...list[idx], ...fee, updated_at: new Date().toISOString() };
-        saved = list[idx];
-      }
+    const existingIndex = fee.id
+      ? list.findIndex(f => f.id === fee.id)
+      : list.findIndex(f => f.student_id === fee.student_id);
+
+    if (existingIndex !== -1) {
+      list[existingIndex] = { ...list[existingIndex], ...fee, updated_at: new Date().toISOString() };
+      saved = list[existingIndex];
+      const students = this.getStudents();
+      const s = students.find(x => x.id === saved.student_id);
+      const studentName = s ? `${s.first_name} ${s.last_name}` : 'Student';
+      this.logActivity(`Fee updated: $${saved.amount_paid}/$${saved.total_fee}`, `${studentName} payment status`, 'activity-dot-green');
     } else {
       saved = {
         ...fee,
@@ -721,7 +726,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     const session = JSON.parse(sessionStr);
     currentUserName = session.name || 'Administrator';
-    currentUserRole = session.role || 'admin';
+    // Healing: Email logins or sessions without teacher phone default to Admin
+    if (session.email && (!session.phone || session.email.includes('@'))) {
+      currentUserRole = 'admin';
+      session.role = 'admin';
+      localStorage.setItem('hanaqaad_admin_session', JSON.stringify(session));
+    } else {
+      currentUserRole = session.role || 'admin';
+    }
 
     const initials = currentUserName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'AD';
 
@@ -770,6 +782,11 @@ function applyRoleRestrictions() {
     // Teachers cannot access Finance (Fees), Staff management (Teachers), or Programs configuration
     document.querySelectorAll('.admin-only-nav').forEach(el => {
       el.classList.add('hidden');
+    });
+  } else {
+    // Admins have full access to all sections
+    document.querySelectorAll('.admin-only-nav').forEach(el => {
+      el.classList.remove('hidden');
     });
   }
 }
@@ -1163,6 +1180,110 @@ function loadOverview() {
       </div>
     `).join('');
   }
+
+  // ── Overview Applet 1: Student Fee Payments Table ──
+  const overviewFeeTotalEl = document.getElementById('overviewFeeTotal');
+  const overviewFeePaidEl = document.getElementById('overviewFeePaid');
+  const overviewFeeOutstandingEl = document.getElementById('overviewFeeOutstanding');
+  const overviewFeesTbody = document.getElementById('overviewFeesTbody');
+
+  const totalTuitionSum = fees.reduce((sum, f) => sum + (Number(f.total_fee) || 0), 0);
+  const totalPaidSum    = fees.reduce((sum, f) => sum + (Number(f.amount_paid) || 0), 0);
+  const totalBalance    = Math.max(0, totalTuitionSum - totalPaidSum);
+
+  if (overviewFeeTotalEl) overviewFeeTotalEl.textContent = formatCurrency(totalTuitionSum);
+  if (overviewFeePaidEl) overviewFeePaidEl.textContent = formatCurrency(totalPaidSum);
+  if (overviewFeeOutstandingEl) overviewFeeOutstandingEl.textContent = formatCurrency(totalBalance);
+
+  if (overviewFeesTbody) {
+    if (students.length === 0) {
+      overviewFeesTbody.innerHTML = emptyRow(8, 'Arday weli lama diiwaangelin (No students enrolled yet)');
+    } else {
+      overviewFeesTbody.innerHTML = students.slice(0, 8).map((s, i) => {
+        const feeRecord = fees.find(f => f.student_id === s.id) || {};
+        const total = Number(feeRecord.total_fee ?? s.fee_amount ?? 0);
+        const paid = Number(feeRecord.amount_paid ?? 0);
+        const balance = Math.max(0, total - paid);
+        const isFree = s.is_free;
+        const status = isFree ? 'free' : (balance <= 0 && total > 0 ? 'paid' : (paid > 0 ? 'partial' : 'unpaid'));
+
+        let actionHtml = '';
+        if (isFree) {
+          actionHtml = '<span class="free-badge">🎓 FREE</span>';
+        } else if (status === 'paid') {
+          actionHtml = `<span class="badge badge-green" style="font-weight:700">✓ Fully Paid</span>`;
+        } else {
+          actionHtml = `
+            <div style="display:flex;gap:0.4rem;align-items:center">
+              <button class="btn btn-xs btn-success" onclick="markStudentPaid('${s.id}')" title="Xaqiiji inuu lacagta wada bixiyay">
+                ✓ Sax Lacagta
+              </button>
+              <button class="btn btn-xs btn-ghost" onclick="openPaymentModal(null, '${s.id}')" title="Faahfaahin ama qayb qor">
+                Qor
+              </button>
+            </div>
+          `;
+        }
+
+        return `
+          <tr>
+            <td>
+              <div class="cell-name">
+                <div class="mini-avatar ${avatarColor(i)}">${getInitials(s.first_name, s.last_name)}</div>
+                <div class="cell-name-text">
+                  <strong>${s.first_name} ${s.last_name}</strong>
+                  <span>${s.phone || '—'}</span>
+                </div>
+              </div>
+            </td>
+            <td><code style="font-size:0.8rem;background:var(--blue-50);color:var(--primary);padding:2px 6px;border-radius:4px;font-weight:800">${s.student_id || '—'}</code></td>
+            <td>${LocalDB.getProgramBadges(s.program || s.programs)}</td>
+            <td><strong>${isFree ? '$0' : formatCurrency(total)}</strong></td>
+            <td style="color:var(--success);font-weight:700">${formatCurrency(paid)}</td>
+            <td style="color:${balance > 0 ? 'var(--error)' : 'var(--success)'};font-weight:700">${formatCurrency(balance)}</td>
+            <td>${statusBadge(status)}</td>
+            <td>${actionHtml}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+
+  // ── Overview Applet 2: Teacher Accounts Management ──
+  const overviewTeachersContainer = document.getElementById('overviewTeachersContainer');
+  if (overviewTeachersContainer) {
+    const teachers = LocalDB.getTeachers();
+    if (teachers.length === 0) {
+      overviewTeachersContainer.innerHTML = `
+        <div style="text-align:center;padding:2rem 1rem;background:var(--gray-50);border-radius:var(--radius-md);border:1px dashed var(--border)">
+          <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:0.75rem">Weli ma jiro macallin ku diiwaangashan nidaamka.</p>
+          <button class="btn btn-primary btn-sm" onclick="openTeacherModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            + Samee Account-kii ugu horreeyay ee Macallin
+          </button>
+        </div>
+      `;
+    } else {
+      overviewTeachersContainer.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:0.75rem">
+          ${teachers.slice(0, 6).map((t, idx) => `
+            <div class="teacher-item-compact">
+              <div style="display:flex;align-items:center;gap:0.75rem">
+                <div class="mini-avatar ${avatarColor(idx)}">${getInitials(t.first_name, t.last_name)}</div>
+                <div>
+                  <strong style="display:block;font-size:0.875rem;color:var(--text-dark)">${t.first_name} ${t.last_name}</strong>
+                  <span style="font-size:0.78rem;color:var(--primary);font-weight:600">📱 Login: ${t.phone || '—'}</span>
+                </div>
+              </div>
+              <div style="display:flex;gap:0.35rem">
+                <button class="btn btn-xs btn-ghost" onclick="editTeacher('${t.id}')" title="Edit Teacher">Edit</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+  }
 }
 
 /* ====================================================================
@@ -1188,40 +1309,70 @@ function renderStudentsTable(students) {
     return;
   }
 
-  tbody.innerHTML = students.map((s, i) => `
-    <tr>
-      <td>
-        <div class="cell-name">
-          <div class="mini-avatar ${avatarColor(i)}">${getInitials(s.first_name, s.last_name)}</div>
-          <div class="cell-name-text">
-            <strong>${s.first_name} ${s.last_name}</strong>
-            <span>${s.address || 'Berbera'}</span>
+  tbody.innerHTML = students.map((s, i) => {
+    const feeRecord = allFees.find(f => f.student_id === s.id) || {};
+    const total = Number(feeRecord.total_fee ?? s.fee_amount ?? 0);
+    const paid = Number(feeRecord.amount_paid ?? 0);
+    const balance = Math.max(0, total - paid);
+    const isFree = s.is_free;
+    const feeStatus = isFree ? 'free' : (balance <= 0 && total > 0 ? 'paid' : (paid > 0 ? 'partial' : 'unpaid'));
+
+    let feeCellHtml = '';
+    if (isFree) {
+      feeCellHtml = '<span class="free-badge">🎓 FREE</span>';
+    } else if (feeStatus === 'paid') {
+      feeCellHtml = `<span class="badge badge-green" style="font-weight:700">✓ Paid (${formatCurrency(total)})</span>`;
+    } else {
+      feeCellHtml = `
+        <div style="display:inline-flex;align-items:center;gap:0.35rem">
+          <span class="badge badge-amber" style="font-weight:700">${formatCurrency(balance)} unpaid</span>
+          <button class="btn btn-xs btn-outline-success" onclick="markStudentPaid('${s.id}')" title="Sax Lacagta (Mark as Paid)">✓ Sax</button>
+        </div>
+      `;
+    }
+
+    return `
+      <tr>
+        <td>
+          <div class="cell-name">
+            <div class="mini-avatar ${avatarColor(i)}">${getInitials(s.first_name, s.last_name)}</div>
+            <div class="cell-name-text">
+              <strong>${s.first_name} ${s.last_name}</strong>
+              <span>${s.address || 'Berbera'}</span>
+            </div>
           </div>
-        </div>
-      </td>
-      <td><code style="font-size:0.85rem;background:var(--blue-50);color:var(--primary);padding:3px 8px;border-radius:4px;font-weight:800">${s.student_id || '—'}</code></td>
-      <td>${LocalDB.getProgramBadges(s.program || s.programs)}</td>
-      <td><strong>${s.phone || '—'}</strong></td>
-      <td><code style="font-size:0.78rem;background:var(--gray-100);padding:2px 6px;border-radius:4px;font-weight:700">${s.pin || '1234'}</code></td>
-      <td>${statusBadge(s.status || 'active')}</td>
-      <td>
-        <div class="row-actions">
-          <button onclick="editRegistrationByStudentId('${s.id}')" title="Edit Student Registration">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-          </button>
-          <button class="delete" onclick="promptDeleteRecord('students', '${s.id}', '${s.first_name} ${s.last_name}')" title="Delete student">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-            </svg>
-          </button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
+        </td>
+        <td><code style="font-size:0.85rem;background:var(--blue-50);color:var(--primary);padding:3px 8px;border-radius:4px;font-weight:800">${s.student_id || '—'}</code></td>
+        <td>${LocalDB.getProgramBadges(s.program || s.programs)}</td>
+        <td><strong>${s.phone || '—'}</strong></td>
+        <td>${feeCellHtml}</td>
+        <td><code style="font-size:0.78rem;background:var(--gray-100);padding:2px 6px;border-radius:4px;font-weight:700">${s.pin || '1234'}</code></td>
+        <td>${statusBadge(s.status || 'active')}</td>
+        <td>
+          <div class="row-actions">
+            <button onclick="openPaymentModal(null, '${s.id}')" title="Record payment for student" style="color:var(--primary)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"/>
+                <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+              </svg>
+            </button>
+            <button onclick="editRegistrationByStudentId('${s.id}')" title="Edit Student Registration">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="delete" onclick="promptDeleteRecord('students', '${s.id}', '${s.first_name} ${s.last_name}')" title="Delete student">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+              </svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function filterStudentsTable() {
@@ -1953,7 +2104,12 @@ function renderFeesTable(fees) {
         <td>${formatDate(f.payment_date)}</td>
         <td>${statusBadge(status)}</td>
         <td>
-          <div class="row-actions">
+          <div class="row-actions" style="gap:0.4rem;align-items:center">
+            ${balance > 0 ? `
+              <button class="btn btn-xs btn-success" onclick="markStudentPaid('${f.id}')" title="Xaqiiji inuu lacagta oo dhan wada bixiyay">
+                ✓ Sax Lacagta
+              </button>
+            ` : '<span style="color:var(--success);font-weight:700;font-size:0.78rem">✓ Bixiyay</span>'}
             <button onclick="editFee('${f.id}')" title="Edit payment record">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
@@ -1990,8 +2146,10 @@ function filterFeesTable() {
   updateFeeSummary(filtered);
 }
 
-function openPaymentModal(fee = null) {
+function openPaymentModal(fee = null, preselectedStudentId = null) {
   editingFeeId = fee?.id || null;
+  const targetStudentId = fee?.student_id || preselectedStudentId;
+
   document.getElementById('paymentModalTitle').textContent = fee ? 'Edit Fee Record' : 'Record Fee Payment';
   document.getElementById('pFeeId').value       = fee?.id             || '';
   document.getElementById('pTotalFee').value    = fee?.total_fee      || '';
@@ -2006,15 +2164,72 @@ function openPaymentModal(fee = null) {
     const opt = document.createElement('option');
     opt.value = s.id;
     opt.textContent = `${s.first_name} ${s.last_name} (${s.student_id} · ${LocalDB.getProgramLabel(s.program)})`;
-    if (fee?.student_id === s.id) opt.selected = true;
+    if (targetStudentId === s.id) opt.selected = true;
     sel.appendChild(opt);
   });
+
+  if (!fee && targetStudentId) {
+    const s = LocalDB.getStudents().find(x => x.id === targetStudentId);
+    if (s) {
+      const existingFee = LocalDB.getFees().find(f => f.student_id === s.id);
+      if (existingFee) {
+        editingFeeId = existingFee.id;
+        document.getElementById('pFeeId').value      = existingFee.id;
+        document.getElementById('pTotalFee').value   = existingFee.total_fee || s.fee_amount || 0;
+        document.getElementById('pAmountPaid').value = existingFee.amount_paid || 0;
+        document.getElementById('pMethod').value     = existingFee.payment_method || 'zaad';
+        document.getElementById('pNotes').value      = existingFee.notes || '';
+      } else {
+        const expected = s.is_free ? 0 : (s.fee_amount || 0);
+        document.getElementById('pTotalFee').value   = expected;
+        document.getElementById('pAmountPaid').value = expected;
+      }
+    }
+  }
 
   ['pStudentErr', 'pTotalFeeErr', 'pAmountPaidErr', 'pPaymentDateErr'].forEach(id => {
     document.getElementById(id).textContent = '';
   });
 
   openModal('paymentModal');
+}
+
+function markStudentPaid(studentOrFeeId, method = 'zaad') {
+  let fee = allFees.find(f => f.id === studentOrFeeId || f.student_id === studentOrFeeId);
+  let student = allStudents.find(s => s.id === studentOrFeeId || s.id === fee?.student_id);
+
+  if (!fee && student) {
+    const sFee = Number(student.fee_amount || 0);
+    fee = {
+      student_id: student.id,
+      total_fee: sFee,
+      amount_paid: sFee,
+      payment_date: new Date().toISOString().slice(0, 10),
+      payment_method: method,
+      notes: 'Fully cleared / Saxay lacagta (1-click payment)',
+    };
+  } else if (fee) {
+    const totalToPay = Number(fee.total_fee || student?.fee_amount || 0);
+    fee = {
+      ...fee,
+      amount_paid: totalToPay,
+      payment_date: new Date().toISOString().slice(0, 10),
+      payment_method: method,
+      notes: (fee.notes ? fee.notes + ' · ' : '') + 'Saxay lacagta (Marked as paid)',
+    };
+  }
+
+  if (fee) {
+    LocalDB.saveFee(fee);
+    const sName = student ? `${student.first_name} ${student.last_name}` : 'Ardayga';
+    showToast(`✓ Lacagta ardayga (${sName}) si guul leh ayaa loo saxay inuu wada bixiyay!`, 'success');
+    allFees = LocalDB.getFees();
+    allStudents = LocalDB.getStudents();
+    loadFees();
+    loadStudents();
+    loadRegistrations();
+    if (currentView === 'overview') loadOverview();
+  }
 }
 
 function editFee(id) {
@@ -2322,6 +2537,7 @@ window.generateRandomPin      = generateRandomPin;
 window.openExamModal          = openExamModal;
 window.editExam               = editExam;
 window.openPaymentModal       = openPaymentModal;
+window.markStudentPaid        = markStudentPaid;
 window.editFee                = editFee;
 window.openTeacherModal       = openTeacherModal;
 window.editTeacher            = editTeacher;

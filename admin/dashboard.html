@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
   <!-- Dashboard Stylesheet (Styled to match public site) -->
-  <link rel="stylesheet" href="dashboard.css?v=2.1.0" />
+  <link rel="stylesheet" href="dashboard.css?v=2.2.0" />
 
   <style>
     /* ── Teacher, Exam & Program extra styles ── */
@@ -50,6 +50,17 @@
     .teacher-card-info strong { display:block;font-size:0.9375rem;font-weight:700;color:var(--text-dark); }
     .teacher-card-info span { font-size:0.8125rem;color:var(--text-muted); }
     .hidden { display:none !important; }
+    .btn-success { background:#16a34a !important; color:#fff !important; border:none; }
+    .btn-success:hover { background:#15803d !important; color:#fff !important; }
+    .btn-outline-success { background:#f0fdf4 !important; color:#15803d !important; border:1px solid #bbf7d0 !important; }
+    .btn-outline-success:hover { background:#dcfce7 !important; color:#166534 !important; }
+    .btn-xs { padding:0.25rem 0.65rem; font-size:0.75rem; border-radius:6px; font-weight:700; display:inline-flex; align-items:center; gap:0.35rem; cursor:pointer; white-space:nowrap; transition:all var(--transition-base); text-decoration:none; }
+    .applet-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1.5rem; box-shadow:var(--shadow-sm); margin-top:1.5rem; }
+    .applet-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; flex-wrap:wrap; gap:0.75rem; }
+    .applet-header h2 { font-size:1.15rem; font-family:var(--font-display); color:var(--text-dark); margin:0; display:flex; align-items:center; gap:0.5rem; }
+    .applet-header p { font-size:0.8125rem; color:var(--text-muted); margin:0.2rem 0 0; }
+    .teacher-item-compact { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--gray-50); transition:all var(--transition-base); }
+    .teacher-item-compact:hover { border-color:var(--blue-200); background:#fff; }
   </style>
 </head>
 
@@ -272,10 +283,20 @@
             </p>
 
             <div class="hero-quick-actions">
-              <!-- Replaced "Add Student" with Registration -->
+              <!-- Registration -->
               <button class="btn btn-accent btn-sm" onclick="openRegistrationModal()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Registration
+                + Registration (Diiwaangeli)
+              </button>
+              <!-- Applet: Add Teacher Account -->
+              <button class="btn btn-outline-white btn-sm" onclick="openTeacherModal()" title="Samee account macallin cusub">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="16" y1="3" x2="22" y2="3"/><line x1="19" y1="0" x2="19" y2="6"/></svg>
+                + Samee Account Macallin
+              </button>
+              <!-- Applet: Record / Sax Lacagta -->
+              <button class="btn btn-outline-white btn-sm" onclick="openPaymentModal()" title="Qor ama sax lacagta ardayga">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                💰 Sax / Record Lacagta
               </button>
               <button class="btn btn-outline-white btn-sm" onclick="switchView('attendance')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
@@ -284,10 +305,6 @@
               <button class="btn btn-outline-white btn-sm" onclick="openExamModal()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
                 Record Exam Result
-              </button>
-              <button class="btn btn-outline-white btn-sm admin-only-nav" onclick="openPaymentModal()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                Record Fee Payment
               </button>
             </div>
           </div>
@@ -346,6 +363,95 @@
                   <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
                 </svg>
               </div>
+            </div>
+          </div>
+
+          <!-- ══════════════════════════════════════════════════════
+               OVERVIEW APPLET 1: STUDENT FEE PAYMENTS & CLEARANCE
+          ══════════════════════════════════════════════════════════ -->
+          <div class="applet-card">
+            <div class="applet-header">
+              <div>
+                <h2>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                  Student Fee Payments · Dabagalka &amp; Saxidda Lacagaha
+                </h2>
+                <p>La soco lacagaha ardaydu bixiyeen, waxaadna toos uga saxi kartaa ardayga marka uu lacagta dhiibo (1-Click &ldquo;✓ Sax Lacagta&rdquo;).</p>
+              </div>
+              <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap">
+                <button class="btn btn-accent btn-sm" onclick="openPaymentModal()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  + Record Payment
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="switchView('fees')">
+                  Full Fee Management &rarr;
+                </button>
+              </div>
+            </div>
+
+            <!-- Mini Fee Summary Row -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:0.75rem;margin-bottom:1.25rem">
+              <div style="background:var(--blue-50);border:1px solid var(--blue-200);border-radius:var(--radius-md);padding:0.75rem 1rem">
+                <span style="font-size:0.72rem;font-weight:700;color:var(--blue-900);text-transform:uppercase;letter-spacing:.03em">Expected Tuition</span>
+                <div style="font-size:1.35rem;font-weight:900;color:var(--primary);margin-top:0.2rem" id="overviewFeeTotal">$0.00</div>
+              </div>
+              <div style="background:#dcfce7;border:1px solid #bbf7d0;border-radius:var(--radius-md);padding:0.75rem 1rem">
+                <span style="font-size:0.72rem;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.03em">Collected Revenue</span>
+                <div style="font-size:1.35rem;font-weight:900;color:#15803d;margin-top:0.2rem" id="overviewFeePaid">$0.00</div>
+              </div>
+              <div style="background:#fee2e2;border:1px solid #fecaca;border-radius:var(--radius-md);padding:0.75rem 1rem">
+                <span style="font-size:0.72rem;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.03em">Outstanding Balance</span>
+                <div style="font-size:1.35rem;font-weight:900;color:#b91c1c;margin-top:0.2rem" id="overviewFeeOutstanding">$0.00</div>
+              </div>
+            </div>
+
+            <!-- Table of Students Fee Status with 1-Click Sax Lacagta -->
+            <div class="table-container">
+              <table aria-label="Overview student fee status">
+                <thead>
+                  <tr>
+                    <th>Student / Ardayga</th>
+                    <th>Student ID</th>
+                    <th>Program</th>
+                    <th>Total Fee</th>
+                    <th>Paid / Bixiyay</th>
+                    <th>Remaining / Dhiman</th>
+                    <th>Payment Status</th>
+                    <th>Quick Action</th>
+                  </tr>
+                </thead>
+                <tbody id="overviewFeesTbody">
+                  <!-- Populated by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ══════════════════════════════════════════════════════
+               OVERVIEW APPLET 2: TEACHER ACCOUNTS MANAGEMENT
+          ══════════════════════════════════════════════════════════ -->
+          <div class="applet-card">
+            <div class="applet-header">
+              <div>
+                <h2>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="16" y1="3" x2="22" y2="3"/><line x1="19" y1="0" x2="19" y2="6"/></svg>
+                  Teacher Accounts · Maamulka Macallimiinta
+                </h2>
+                <p>Samee account-yada macallimiinta (Magac iyo Lambarka Telefoonka oo keliya). Macalinku wuxuu nidaamka ku gali doonaa taleefankiisa.</p>
+              </div>
+              <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap">
+                <button class="btn btn-primary btn-sm" onclick="openTeacherModal()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  + Samee Account Macallin
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="switchView('teachers')">
+                  View All Teachers &rarr;
+                </button>
+              </div>
+            </div>
+
+            <div id="overviewTeachersContainer">
+              <!-- Populated by JS -->
             </div>
           </div>
 
@@ -434,6 +540,7 @@
                     <th>Student ID</th>
                     <th>Program</th>
                     <th>Phone</th>
+                    <th>Tuition Fee / Lacagta</th>
                     <th>Portal PIN</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -1190,9 +1297,9 @@
   <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 
   <!-- Supabase Env Config -->
-  <script src="../env.js?v=2.1.0"></script>
+  <script src="../env.js?v=2.2.0"></script>
   <!-- Dashboard Script (Supabase Edition) -->
-  <script src="dashboard.js?v=2.1.0"></script>
+  <script src="dashboard.js?v=2.2.0"></script>
 </body>
 
 </html>

@@ -221,7 +221,7 @@
   </a>
 
   <!-- Supabase Env Config -->
-  <script src="../env.js?v=2.1.0"></script>
+  <script src="../env.js?v=2.2.0"></script>
 
   <script>
     // ── Initialize Supabase ────────────────────────────────
@@ -404,7 +404,7 @@
           .eq('id', data.user.id)
           .maybeSingle();
 
-        const role = profile?.role || (email.toLowerCase().includes('admin') ? 'admin' : 'teacher');
+        const role = profile?.role === 'teacher' ? 'teacher' : 'admin';
         const staffName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || data.user.email.split('@')[0];
 
         localStorage.setItem('hanaqaad_admin_session', JSON.stringify({
