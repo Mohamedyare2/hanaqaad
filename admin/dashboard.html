@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
   <!-- Dashboard Stylesheet (Styled to match public site) -->
-  <link rel="stylesheet" href="dashboard.css?v=2.2.0" />
+  <link rel="stylesheet" href="dashboard.css?v=2.3.0" />
 
   <style>
     /* ── Teacher, Exam & Program extra styles ── */
@@ -1192,7 +1192,7 @@
 
   <!-- ── Add / Edit Teacher Modal ── -->
   <div class="modal-overlay" id="teacherModal" role="dialog" aria-modal="true" aria-labelledby="teacherModalTitle">
-    <div class="modal" style="max-width:480px">
+    <div class="modal" style="max-width:500px">
       <div class="modal-header">
         <h2 id="teacherModalTitle">Add Teacher Account</h2>
         <button class="modal-close" data-close="teacherModal" aria-label="Close modal">
@@ -1202,9 +1202,9 @@
         </button>
       </div>
       <div class="modal-body">
-        <div class="card" style="background:#f0fdf4;border:1px solid #bbf7d0;padding:0.75rem 1rem;margin-bottom:1.15rem;border-radius:var(--radius-md)">
-          <p style="font-size:0.8125rem;color:#166534;margin:0;line-height:1.4">
-            <strong>Sameynta Account-ka Macalinka:</strong> Xogta laga rabo waa <strong>Magaca</strong> iyo <strong>Lambarka Telefoonka</strong> oo keliya. Macalinku wuxuu nidaamka ku gali doonaa lambarkiisa taleefanka.
+        <div class="card" style="background:#eff6ff;border:1px solid #bfdbfe;padding:0.75rem 1rem;margin-bottom:1.15rem;border-radius:var(--radius-md)">
+          <p style="font-size:0.8125rem;color:#1e40af;margin:0;line-height:1.4">
+            <strong>Sameynta Account-ka Macalinka:</strong> Geli magaca, taleefanka, iyo <strong>Username</strong> &amp; <strong>Password</strong> uu macallinku nidaamka ku soo galayo.
           </p>
         </div>
         <div class="form-row">
@@ -1223,9 +1223,21 @@
           <label for="tPhone">Phone Number / Lambarka Telefoonka *</label>
           <input type="tel" id="tPhone" placeholder="+252 63 4284015" required />
           <span class="field-error" id="tPhoneErr"></span>
-          <span style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;display:block">
-            Lambarkan taleefanka ayaa u noqon doona macalinka aqoonsiga (Login) uu nidaamka ku galo.
-          </span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tUsername">Username (Magaca Galitaanka) *</label>
+            <input type="text" id="tUsername" placeholder="e.g. faadumo" autocomplete="off" required />
+            <span class="field-error" id="tUsernameErr"></span>
+          </div>
+          <div class="form-group">
+            <label for="tPassword">Password (Furaha Sirta ah) *</label>
+            <div style="position:relative;display:flex;align-items:center">
+              <input type="text" id="tPassword" placeholder="e.g. Macalin@123" autocomplete="off" required style="padding-right:4.5rem" />
+              <button type="button" id="tGenPassBtn" style="position:absolute;right:8px;background:none;border:none;cursor:pointer;color:var(--primary);font-size:0.75rem;font-weight:700;padding:2px 4px" title="Samee Furaha Si Toos ah">Auto-PIN</button>
+            </div>
+            <span class="field-error" id="tPasswordErr"></span>
+          </div>
         </div>
         <input type="hidden" id="tTeacherId" />
       </div>
@@ -1297,9 +1309,9 @@
   <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 
   <!-- Supabase Env Config -->
-  <script src="../env.js?v=2.2.0"></script>
+  <script src="../env.js?v=2.3.0"></script>
   <!-- Dashboard Script (Supabase Edition) -->
-  <script src="dashboard.js?v=2.2.0"></script>
+  <script src="dashboard.js?v=2.3.0"></script>
 </body>
 
 </html>

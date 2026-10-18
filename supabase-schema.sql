@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS teachers (
   first_name    TEXT NOT NULL,
   last_name     TEXT NOT NULL,
   phone         TEXT NOT NULL UNIQUE,
+  username      TEXT UNIQUE,
+  password      TEXT,
   role          TEXT NOT NULL DEFAULT 'teacher',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
