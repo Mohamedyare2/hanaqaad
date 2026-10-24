@@ -75,7 +75,7 @@ const ALUMNI = [
   { id: 57, name: 'Abshir Kadar Jama', course: 'Training Course', courseKey: 'tc', serial: 'TC-157' },
   { id: 58, name: 'Sainab Ibrahim Jama', course: 'Training Course', courseKey: 'tc', serial: 'TC-158' },
   { id: 59, name: 'Abdikarim Aydid Ahmed', course: 'Computer Literacy Diploma', courseKey: 'cld', serial: 'CLD-159' },
-  { id: 60, name: 'Mohamed Fu\'ad Abdi', course: 'Computer Literacy Diploma', courseKey: 'cld', serial: 'CLD-310' },
+  { id: 60, name: 'Mohamed Fu\'ad Abdi', course: 'Computer Literacy Diploma', courseKey: 'cld', serial: 'CLD-315' },
 ];
 
 /* ============================================================
