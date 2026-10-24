@@ -75,6 +75,7 @@ const ALUMNI = [
   { id: 57, name: 'Abshir Kadar Jama', course: 'Training Course', courseKey: 'tc', serial: 'TC-157' },
   { id: 58, name: 'Sainab Ibrahim Jama', course: 'Training Course', courseKey: 'tc', serial: 'TC-158' },
   { id: 59, name: 'Abdikarim Aydid Ahmed', course: 'Computer Literacy Diploma', courseKey: 'cld', serial: 'CLD-159' },
+  { id: 60, name: 'Mohamed Fu\'ad Abdi', course: 'Computer Literacy Diploma', courseKey: 'cld', serial: 'CLD-310' },
 ];
 
 /* ============================================================
@@ -223,7 +224,7 @@ function initCounterAnimation() {
     // Check if target should be custom calculated
     let target = parseInt(el.dataset.target, 10);
     // If it's the 50 placeholder from previous static HTML, update it to the true length (51).
-    if (target === 50 && el.closest('.stat-item').querySelector('.stat-label').textContent.includes('Alumni')) {
+    if (el.closest('.stat-item')?.querySelector('.stat-label')?.textContent.includes('Alumni')) {
       target = ALUMNI.length;
     }
 
