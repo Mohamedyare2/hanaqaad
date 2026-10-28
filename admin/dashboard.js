@@ -118,20 +118,47 @@ const SupabaseDB = {
         if (typeof populateAllProgramDropdowns === 'function') populateAllProgramDropdowns();
       }
 
-      // Sync students — MERGE with local data so freshly-registered students
-      // that haven't synced to Supabase yet are NOT lost on page load.
+      // 1. Sync students — Fetch cloud students, then upload any local students that aren't in cloud yet
       const { data: studs, error: studErr } = await this.client.from('students').select('*').order('created_at', { ascending: false });
-      if (!studErr && studs) {
-        const localStudents = JSON.parse(localStorage.getItem(this.KEYS.STUDENTS) || '[]');
-        // Keep any local-only students whose student_id isn't in Supabase yet
-        const supabaseStudentIds = new Set(studs.map(s => s.student_id).filter(Boolean));
-        const localOnly = localStudents.filter(ls => ls.student_id && !supabaseStudentIds.has(ls.student_id));
-        const mergedStudents = [...studs, ...localOnly];
-        localStorage.setItem(this.KEYS.STUDENTS, JSON.stringify(mergedStudents));
-        this.isLive = true;
-      }
+      const supabaseStudentIds = new Set((studs || []).map(s => s.student_id).filter(Boolean));
+      const localStudents = JSON.parse(localStorage.getItem(this.KEYS.STUDENTS) || '[]');
+      const unsyncedStudents = localStudents.filter(ls => ls.student_id && !supabaseStudentIds.has(ls.student_id));
 
-      // Sync attendance
+      if (unsyncedStudents.length > 0) {
+        console.log(`Auto-uploading ${unsyncedStudents.length} local student(s) to Supabase...`);
+        const batch = unsyncedStudents.map(s => ({
+          first_name: s.first_name,
+          last_name: s.last_name,
+          student_id: s.student_id,
+          phone: s.phone,
+          program: Array.isArray(s.programs) ? s.programs.join(', ') : (s.program || ''),
+          status: s.status || 'active',
+          security_pin: s.pin || s.security_pin || null,
+          fee_amount: Number(s.fee_amount || 0),
+          is_free: Boolean(s.is_free),
+          address: s.address || null,
+          notes: s.notes || null,
+        }));
+        const { error: upErr } = await this.client.from('students').upsert(batch, { onConflict: 'student_id' });
+        if (!upErr) {
+          console.log(`✅ ${batch.length} student(s) uploaded to Supabase successfully!`);
+          if (typeof showToast === 'function') {
+            showToast(`✅ ${batch.length} arday oo dheeraad ah ayaa toos loogu shubay Supabase!`, 'success');
+          }
+          // Re-fetch all students from Supabase so local cache is complete
+          const { data: refetched } = await this.client.from('students').select('*').order('created_at', { ascending: false });
+          if (refetched && refetched.length > 0) {
+            localStorage.setItem(this.KEYS.STUDENTS, JSON.stringify(refetched));
+          }
+        } else {
+          console.error('Supabase student upload error:', upErr);
+        }
+      } else if (!studErr && studs) {
+        localStorage.setItem(this.KEYS.STUDENTS, JSON.stringify(studs));
+      }
+      this.isLive = true;
+
+      // 2. Sync attendance
       const { data: atts, error: attErr } = await this.client.from('attendance').select('*');
       if (!attErr && atts) {
         const store = {};
@@ -142,29 +169,44 @@ const SupabaseDB = {
         localStorage.setItem(this.KEYS.ATTENDANCE, JSON.stringify(store));
       }
 
-      // Sync fees
+      // 3. Sync fees
       const { data: feeData, error: feeErr } = await this.client.from('fees').select('*').order('created_at', { ascending: false });
       if (!feeErr && feeData) {
         localStorage.setItem(this.KEYS.FEES, JSON.stringify(feeData));
       }
 
-      // Sync exams
+      // 4. Sync exams
       const { data: examData, error: examErr } = await this.client.from('exams').select('*').order('created_at', { ascending: false });
       if (!examErr && examData) {
         localStorage.setItem(this.KEYS.EXAMS, JSON.stringify(examData));
       }
 
-      // Sync registrations — keep local-only ones that aren't in Supabase yet
+      // 5. Sync registrations
       const { data: regData, error: regErr } = await this.client.from('registrations').select('*').order('created_at', { ascending: false });
-      if (!regErr && regData) {
-        const localRegs = JSON.parse(localStorage.getItem(this.KEYS.REGISTRATIONS) || '[]');
-        const supabaseRegIds = new Set(regData.map(r => r.student_id).filter(Boolean));
-        const localOnlyRegs = localRegs.filter(lr => lr.student_id && !supabaseRegIds.has(lr.student_id));
-        const mergedRegs = [...regData, ...localOnlyRegs];
-        localStorage.setItem(this.KEYS.REGISTRATIONS, JSON.stringify(mergedRegs));
+      const supabaseRegIds = new Set((regData || []).map(r => r.student_id).filter(Boolean));
+      const localRegs = JSON.parse(localStorage.getItem(this.KEYS.REGISTRATIONS) || '[]');
+      const unsyncedRegs = localRegs.filter(lr => lr.student_id && !supabaseRegIds.has(lr.student_id));
+      if (unsyncedRegs.length > 0) {
+        const regBatch = unsyncedRegs.map(r => ({
+          student_id: r.student_id,
+          first_name: r.first_name,
+          last_name: r.last_name,
+          phone: r.phone || null,
+          program: Array.isArray(r.programs) ? r.programs.join(', ') : (r.program || ''),
+          fee_amount: Number(r.fee_amount || 0),
+          is_free: Boolean(r.is_free),
+          status: r.status || 'approved',
+          registered_by: r.registered_by || null,
+          notes: r.notes || null,
+        }));
+        await this.client.from('registrations').upsert(regBatch, { onConflict: 'student_id' });
+        const { data: refetchedRegs } = await this.client.from('registrations').select('*').order('created_at', { ascending: false });
+        if (refetchedRegs) localStorage.setItem(this.KEYS.REGISTRATIONS, JSON.stringify(refetchedRegs));
+      } else if (!regErr && regData) {
+        localStorage.setItem(this.KEYS.REGISTRATIONS, JSON.stringify(regData));
       }
 
-      // Sync teachers (from teachers table or profiles table where role='teacher')
+      // 6. Sync teachers
       const { data: tData, error: tErr } = await this.client.from('teachers').select('*');
       if (!tErr && tData && tData.length > 0) {
         localStorage.setItem(this.KEYS.TEACHERS, JSON.stringify(tData));
@@ -178,75 +220,6 @@ const SupabaseDB = {
       // Update Live Status Badge
       if (dot) dot.style.background = '#22c55e';
       if (text) text.textContent = 'Supabase Connected';
-
-      // SILENT AUTO-MIGRATION: Ensure all existing local data is instantly uploaded to Supabase
-      if (this.client) {
-        try {
-          const localStudents = JSON.parse(localStorage.getItem(this.KEYS.STUDENTS) || '[]');
-          const unsyncedStudents = localStudents.filter(ls => ls.student_id && !supabaseStudentIds.has(ls.student_id));
-          if (unsyncedStudents.length > 0) {
-            const batch = unsyncedStudents.map(s => ({
-              first_name: s.first_name,
-              last_name: s.last_name,
-              student_id: s.student_id,
-              phone: s.phone,
-              program: Array.isArray(s.programs) ? s.programs.join(', ') : (s.program || ''),
-              status: s.status || 'active',
-              security_pin: s.pin || s.security_pin || null,
-              fee_amount: Number(s.fee_amount || 0),
-              is_free: Boolean(s.is_free),
-              address: s.address || null,
-              notes: s.notes || null,
-            }));
-            const { error: upErr } = await this.client.from('students').upsert(batch, { onConflict: 'student_id' });
-            if (upErr) {
-              console.error('Supabase upload error:', upErr);
-              if (typeof showToast === 'function') {
-                showToast('⚠️ Supabase sync xidhan (RLS Policy): ' + (upErr.message || 'Access Denied'), 'error');
-              }
-            } else {
-              console.log(`✅ Successfully uploaded ${batch.length} student(s) to Supabase!`);
-              if (typeof showToast === 'function') {
-                showToast(`✅ ${batch.length} arday ayaa toos loogu shubay Supabase Cloud!`, 'success');
-              }
-            }
-          }
-
-          // Also auto-migrate local registrations
-          const localRegs = JSON.parse(localStorage.getItem(this.KEYS.REGISTRATIONS) || '[]');
-          if (localRegs.length > 0) {
-            const regBatch = localRegs.map(r => ({
-              student_id: r.student_id,
-              first_name: r.first_name,
-              last_name: r.last_name,
-              phone: r.phone || null,
-              program: Array.isArray(r.programs) ? r.programs.join(', ') : (r.program || ''),
-              fee_amount: Number(r.fee_amount || 0),
-              is_free: Boolean(r.is_free),
-              status: r.status || 'approved',
-              registered_by: r.registered_by || null,
-              notes: r.notes || null,
-            }));
-            await this.client.from('registrations').upsert(regBatch, { onConflict: 'student_id' });
-          }
-
-          // Also auto-migrate teachers
-          const localTeachers = JSON.parse(localStorage.getItem(this.KEYS.TEACHERS) || '[]');
-          if (localTeachers.length > 0) {
-            const teacherBatch = localTeachers.map(t => ({
-              first_name: t.first_name,
-              last_name: t.last_name,
-              phone: t.phone,
-              username: t.username || null,
-              password: t.password || null,
-              role: 'teacher'
-            }));
-            await this.client.from('teachers').upsert(teacherBatch, { onConflict: 'phone' });
-          }
-        } catch (mErr) {
-          console.warn('Auto-migration notice:', mErr);
-        }
-      }
 
       // ── Always refresh the UI after sync so all devices see the same data ──
       // Refresh whatever view is currently active
