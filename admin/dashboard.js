@@ -86,6 +86,11 @@ const SupabaseDB = {
     }
 
     // 3. Sync live records from Supabase
+    //    Show "Syncing…" status badge immediately on page load
+    const _dot  = document.getElementById('supabaseDot');
+    const _text = document.getElementById('supabaseText');
+    if (_dot && this.client)  _dot.style.background  = '#f59e0b';
+    if (_text && this.client) _text.textContent = 'Syncing…';
     this.syncFromSupabase();
   },
 
@@ -149,6 +154,16 @@ const SupabaseDB = {
         localStorage.setItem(this.KEYS.EXAMS, JSON.stringify(examData));
       }
 
+      // Sync registrations — keep local-only ones that aren't in Supabase yet
+      const { data: regData, error: regErr } = await this.client.from('registrations').select('*').order('created_at', { ascending: false });
+      if (!regErr && regData) {
+        const localRegs = JSON.parse(localStorage.getItem(this.KEYS.REGISTRATIONS) || '[]');
+        const supabaseRegIds = new Set(regData.map(r => r.student_id).filter(Boolean));
+        const localOnlyRegs = localRegs.filter(lr => lr.student_id && !supabaseRegIds.has(lr.student_id));
+        const mergedRegs = [...regData, ...localOnlyRegs];
+        localStorage.setItem(this.KEYS.REGISTRATIONS, JSON.stringify(mergedRegs));
+      }
+
       // Sync teachers (from teachers table or profiles table where role='teacher')
       const { data: tData, error: tErr } = await this.client.from('teachers').select('*');
       if (!tErr && tData && tData.length > 0) {
@@ -164,7 +179,8 @@ const SupabaseDB = {
       if (dot) dot.style.background = '#22c55e';
       if (text) text.textContent = 'Supabase Connected';
 
-      // Refresh current dashboard view with live data
+      // ── Always refresh the UI after sync so all devices see the same data ──
+      // Refresh whatever view is currently active
       if (typeof loadOverview      === 'function' && currentView === 'overview')     loadOverview();
       if (typeof loadStudents      === 'function' && currentView === 'students')     loadStudents();
       if (typeof loadRegistrations === 'function' && currentView === 'registration') loadRegistrations();
@@ -172,8 +188,23 @@ const SupabaseDB = {
       if (typeof loadExams         === 'function' && currentView === 'exams')        loadExams();
       if (typeof loadTeachers      === 'function' && currentView === 'teachers')     loadTeachers();
 
+      // ALWAYS refresh overview stat counters so sidebar & hero numbers are correct
+      // even if user is on a different view
+      if (typeof loadOverview === 'function') {
+        // Update just the stat counters without switching views
+        const _students = this.getStudents();
+        const _sc = document.getElementById('statTotalStudents');
+        const _ss = document.getElementById('sidebarStudentCount');
+        if (_sc) _sc.textContent = _students.length;
+        if (_ss) _ss.textContent = _students.length;
+      }
+
     } catch (err) {
       console.warn('Supabase sync notice:', err);
+      const dot = document.getElementById('supabaseDot');
+      const text = document.getElementById('supabaseText');
+      if (dot) dot.style.background = '#ef4444';
+      if (text) text.textContent = 'Sync Error';
     }
   },
 
@@ -338,14 +369,26 @@ const SupabaseDB = {
 
       this.client.from('students').upsert([payload], { onConflict: 'student_id' }).select().then(res => {
         if (!res.error && res.data && res.data[0]) {
+          // Update local record with the Supabase-assigned UUID so other devices
+          // can find and sync this record properly
           const freshList = this.getStudents();
           const target = freshList.find(s => s.student_id === saved.student_id);
           if (target) {
             target.id = res.data[0].id;
+            target._synced = true;
             localStorage.setItem(this.KEYS.STUDENTS, JSON.stringify(freshList));
           }
+          console.info('Student synced to Supabase:', saved.student_id, '→ UUID:', res.data[0].id);
         } else if (res.error) {
-          console.warn('Supabase student save error:', res.error);
+          console.warn('Supabase student save error (student will remain local-only):', res.error.message || res.error);
+          // Mark as not synced so we can retry
+          const freshList = this.getStudents();
+          const target = freshList.find(s => s.student_id === saved.student_id);
+          if (target) {
+            target._synced = false;
+            target._syncError = res.error.message;
+            localStorage.setItem(this.KEYS.STUDENTS, JSON.stringify(freshList));
+          }
         }
       });
     }
@@ -429,6 +472,26 @@ const SupabaseDB = {
       this.logActivity(`New student registered: ${saved.first_name} ${saved.last_name}`, `ID: ${saved.student_id} · ${feeNote}`, 'activity-dot-blue');
     }
     localStorage.setItem(this.KEYS.REGISTRATIONS, JSON.stringify(list));
+
+    // Sync registration to Supabase so all devices see it
+    if (this.client && saved) {
+      const regPayload = {
+        student_id:   saved.student_id,
+        first_name:   saved.first_name,
+        last_name:    saved.last_name,
+        phone:        saved.phone || null,
+        program:      Array.isArray(saved.programs) ? saved.programs.join(', ') : (saved.program || ''),
+        fee_amount:   Number(saved.fee_amount || 0),
+        is_free:      Boolean(saved.is_free),
+        status:       saved.status || 'approved',
+        registered_by: saved.registered_by || null,
+        notes:        saved.notes || null,
+      };
+      this.client.from('registrations').upsert([regPayload], { onConflict: 'student_id' }).then(res => {
+        if (res.error) console.warn('Supabase registration save error:', res.error.message || res.error);
+      });
+    }
+
     return list;
   },
   deleteRegistration(id) {

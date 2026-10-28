@@ -136,7 +136,35 @@ CREATE TABLE IF NOT EXISTS exams (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ── 7. CONTACT MESSAGES ───────────────────────────────────
+-- ── 7. REGISTRATIONS (mirrors student intake for cross-device sync) ──
+CREATE TABLE IF NOT EXISTS registrations (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  student_id      TEXT UNIQUE,                  -- e.g. HC-500
+  first_name      TEXT NOT NULL,
+  last_name       TEXT NOT NULL,
+  phone           TEXT,
+  program         TEXT,
+  fee_amount      NUMERIC(10,2) NOT NULL DEFAULT 0,
+  is_free         BOOLEAN NOT NULL DEFAULT false,
+  status          TEXT NOT NULL DEFAULT 'approved',
+  registered_by   TEXT,
+  notes           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE registrations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Registrations: staff manage" ON registrations;
+CREATE POLICY "Registrations: staff manage"
+  ON registrations FOR ALL TO authenticated
+  USING (is_staff()) WITH CHECK (is_staff());
+
+DROP TRIGGER IF EXISTS registrations_updated_at ON registrations;
+CREATE TRIGGER registrations_updated_at BEFORE UPDATE ON registrations FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE INDEX IF NOT EXISTS idx_registrations_student_id ON registrations(student_id);
+
+-- ── 8. CONTACT MESSAGES ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS contact_messages (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   first_name    TEXT NOT NULL,
