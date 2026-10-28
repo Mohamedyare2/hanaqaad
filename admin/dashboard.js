@@ -179,6 +179,33 @@ const SupabaseDB = {
       if (dot) dot.style.background = '#22c55e';
       if (text) text.textContent = 'Supabase Connected';
 
+      // Automatic initial migration: If this device has local students not yet in Supabase, push them up
+      if (this.client) {
+        const localBeforeSync = JSON.parse(localStorage.getItem(this.KEYS.STUDENTS) || '[]');
+        if (localBeforeSync.length > 0) {
+          const unsynced = localBeforeSync.filter(ls => ls.student_id && !supabaseStudentIds.has(ls.student_id));
+          if (unsynced.length > 0) {
+            console.log(`Auto-uploading ${unsynced.length} local-only student(s) to Supabase...`);
+            const payloadBatch = unsynced.map(s => ({
+              first_name: s.first_name,
+              last_name: s.last_name,
+              student_id: s.student_id,
+              phone: s.phone,
+              program: Array.isArray(s.programs) ? s.programs.join(', ') : (s.program || ''),
+              status: s.status || 'active',
+              security_pin: s.pin || s.security_pin || null,
+              fee_amount: Number(s.fee_amount || 0),
+              is_free: Boolean(s.is_free),
+              address: s.address || null,
+              notes: s.notes || null,
+            }));
+            this.client.from('students').upsert(payloadBatch, { onConflict: 'student_id' }).then(res => {
+              if (!res.error) console.log('Auto-upload to Supabase succeeded!');
+            });
+          }
+        }
+      }
+
       // ── Always refresh the UI after sync so all devices see the same data ──
       // Refresh whatever view is currently active
       if (typeof loadOverview      === 'function' && currentView === 'overview')     loadOverview();
@@ -2666,6 +2693,122 @@ function executeDelete() {
 
   pendingDelete = null;
 }
+
+
+/* ────────────────────────────────────────────────────────────
+   20.5 ONE-CLICK FULL SYNC: LOCALSTORAGE -> SUPABASE
+──────────────────────────────────────────────────────────── */
+async function syncAllLocalToSupabase() {
+  const btn = document.getElementById('syncToSupabaseBtn');
+  if (!LocalDB.client) {
+    showToast('Supabase client is not connected! Check env.js', 'error');
+    return;
+  }
+
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Uploading to Supabase...';
+  }
+
+  try {
+    const students = LocalDB.getStudents();
+    const registrations = LocalDB.getRegistrations();
+    const fees = LocalDB.getFees();
+    const exams = LocalDB.getExams();
+    const teachers = LocalDB.getTeachers();
+
+    let uploadedCount = 0;
+
+    // 1. Upload Students
+    if (students.length > 0) {
+      const studentRows = students.map(s => {
+        const payload = {
+          first_name: s.first_name,
+          last_name: s.last_name,
+          student_id: s.student_id,
+          phone: s.phone,
+          program: Array.isArray(s.programs) ? s.programs.join(', ') : (s.program || ''),
+          status: s.status || 'active',
+          security_pin: s.pin || s.security_pin || null,
+          fee_amount: Number(s.fee_amount || 0),
+          is_free: Boolean(s.is_free),
+          address: s.address || null,
+          notes: s.notes || null,
+        };
+        const isUUID = s.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.id);
+        if (isUUID) payload.id = s.id;
+        return payload;
+      });
+
+      const { data: upStuds, error: studErr } = await LocalDB.client
+        .from('students')
+        .upsert(studentRows, { onConflict: 'student_id' })
+        .select();
+
+      if (studErr) {
+        console.error('Students upload error:', studErr);
+      } else {
+        uploadedCount += (upStuds ? upStuds.length : studentRows.length);
+      }
+    }
+
+    // 2. Upload Registrations
+    if (registrations.length > 0) {
+      const regRows = registrations.map(r => ({
+        student_id: r.student_id,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        phone: r.phone || null,
+        program: Array.isArray(r.programs) ? r.programs.join(', ') : (r.program || ''),
+        fee_amount: Number(r.fee_amount || 0),
+        is_free: Boolean(r.is_free),
+        status: r.status || 'approved',
+        registered_by: r.registered_by || null,
+        notes: r.notes || null,
+      }));
+
+      const { error: regErr } = await LocalDB.client
+        .from('registrations')
+        .upsert(regRows, { onConflict: 'student_id' });
+
+      if (regErr) console.warn('Registrations upload error:', regErr.message || regErr);
+    }
+
+    // 3. Upload Teachers
+    if (teachers.length > 0) {
+      const teacherRows = teachers.map(t => ({
+        first_name: t.first_name,
+        last_name: t.last_name,
+        phone: t.phone,
+        username: t.username || null,
+        password: t.password || null,
+        role: 'teacher'
+      }));
+
+      const { error: tErr } = await LocalDB.client
+        .from('teachers')
+        .upsert(teacherRows, { onConflict: 'phone' });
+
+      if (tErr) console.warn('Teachers upload error:', tErr.message || tErr);
+    }
+
+    showToast(`✅ Dhammaan xogtii (${students.length} arday) waxaa loo diray Supabase Cloud!`, 'success');
+
+    // Trigger complete sync from Supabase to refresh state & cache
+    await LocalDB.syncFromSupabase();
+
+  } catch (err) {
+    console.error('Full upload failed:', err);
+    showToast('Sync error: ' + err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+}
+window.syncAllLocalToSupabase = syncAllLocalToSupabase;
 
 /* ────────────────────────────────────────────────────────────
    21. EXPOSE GLOBAL FUNCTIONS
