@@ -198,7 +198,18 @@ const SupabaseDB = {
               address: s.address || null,
               notes: s.notes || null,
             }));
-            await this.client.from('students').upsert(batch, { onConflict: 'student_id' });
+            const { error: upErr } = await this.client.from('students').upsert(batch, { onConflict: 'student_id' });
+            if (upErr) {
+              console.error('Supabase upload error:', upErr);
+              if (typeof showToast === 'function') {
+                showToast('⚠️ Supabase sync xidhan (RLS Policy): ' + (upErr.message || 'Access Denied'), 'error');
+              }
+            } else {
+              console.log(`✅ Successfully uploaded ${batch.length} student(s) to Supabase!`);
+              if (typeof showToast === 'function') {
+                showToast(`✅ ${batch.length} arday ayaa toos loogu shubay Supabase Cloud!`, 'success');
+              }
+            }
           }
 
           // Also auto-migrate local registrations
