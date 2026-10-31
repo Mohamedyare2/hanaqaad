@@ -2209,38 +2209,97 @@ function saveExam() {
 }
 
 /* ====================================================================
-   17. MODULE: FEES (Admin Restricted)
+   17. MODULE: FEES & TUITION MANAGEMENT (Admin Restricted)
 ==================================================================== */
-function initFeeEvents() {
-  document.getElementById('feeSearch').addEventListener('input', filterFeesTable);
-  document.getElementById('feeProgramFilter').addEventListener('change', filterFeesTable);
-  document.getElementById('feeStatusFilter').addEventListener('change', filterFeesTable);
-  document.getElementById('savePaymentBtn').addEventListener('click', savePayment);
+function getStudentFeeItem(student, feesList = null) {
+  const fees = feesList || LocalDB.getFees();
+  const feeRecord = fees.find(f => f.student_id === student.id || f.student_id === student.student_id) || {};
+  const isFree = Boolean(student.is_free);
+  const agreedFee = (student.fee_amount !== undefined && student.fee_amount !== null && student.fee_amount !== '')
+    ? Number(student.fee_amount)
+    : (feeRecord.total_fee !== undefined ? Number(feeRecord.total_fee) : 0);
+  const total = isFree ? 0 : agreedFee;
+  const paid = isFree ? 0 : Number(feeRecord.amount_paid || 0);
+  const balance = Math.max(0, total - paid);
+  const status = isFree ? 'free' : (balance <= 0 && total > 0 ? 'paid' : (paid > 0 ? 'partial' : 'unpaid'));
 
-  document.getElementById('pStudent').addEventListener('change', e => {
-    const student = allStudents.find(s => s.id === e.target.value);
-    if (student) {
-      const defaultFee = LocalDB.getProgramFee(student.program);
-      document.getElementById('pTotalFee').value = defaultFee;
-    }
-  });
+  return {
+    student,
+    student_id: student.id,
+    student_code: student.student_id,
+    fee_id: feeRecord.id || null,
+    fee_record: feeRecord,
+    total_fee: total,
+    amount_paid: paid,
+    balance: balance,
+    is_free: isFree,
+    payment_date: feeRecord.payment_date || null,
+    payment_method: feeRecord.payment_method || 'zaad',
+    notes: feeRecord.notes || '',
+    status: status
+  };
+}
+
+function initFeeEvents() {
+  const searchEl = document.getElementById('feeSearch');
+  if (searchEl) searchEl.addEventListener('input', filterFeesTable);
+
+  const progFilter = document.getElementById('feeProgramFilter');
+  if (progFilter) progFilter.addEventListener('change', filterFeesTable);
+
+  const statusFilter = document.getElementById('feeStatusFilter');
+  if (statusFilter) statusFilter.addEventListener('change', filterFeesTable);
+
+  const saveBtn = document.getElementById('savePaymentBtn');
+  if (saveBtn) saveBtn.addEventListener('click', savePayment);
+
+  // Auto-populate student tuition and existing payment details when student is selected
+  const studentSelect = document.getElementById('pStudent');
+  if (studentSelect) {
+    studentSelect.addEventListener('change', e => {
+      allStudents = LocalDB.getStudents();
+      allFees     = LocalDB.getFees();
+      const student = allStudents.find(s => s.id === e.target.value);
+      if (student) {
+        const existingFee = allFees.find(f => f.student_id === student.id || f.student_id === student.student_id);
+        editingFeeId = existingFee?.id || null;
+        document.getElementById('pFeeId').value = existingFee?.id || '';
+
+        const agreedFee = (student.fee_amount !== undefined && student.fee_amount !== null && student.fee_amount !== '')
+          ? Number(student.fee_amount)
+          : (existingFee?.total_fee !== undefined ? Number(existingFee.total_fee) : 0);
+        const total = student.is_free ? 0 : agreedFee;
+        const paid = existingFee?.amount_paid !== undefined ? Number(existingFee.amount_paid) : total;
+
+        document.getElementById('pTotalFee').value = total;
+        document.getElementById('pAmountPaid').value = paid;
+        if (existingFee?.payment_method) document.getElementById('pMethod').value = existingFee.payment_method;
+        if (existingFee?.notes) document.getElementById('pNotes').value = existingFee.notes;
+      }
+    });
+  }
 }
 
 function loadFees() {
   allStudents = LocalDB.getStudents();
   allFees     = LocalDB.getFees();
-  renderFeesTable(allFees);
-  updateFeeSummary(allFees);
+
+  const allFeeItems = allStudents.map(s => getStudentFeeItem(s, allFees));
+  renderFeesTable(allFeeItems);
+  updateFeeSummary(allFeeItems);
 }
 
-function updateFeeSummary(fees) {
-  const total       = fees.reduce((sum, f) => sum + (Number(f.total_fee) || 0), 0);
-  const paid        = fees.reduce((sum, f) => sum + (Number(f.amount_paid) || 0), 0);
+function updateFeeSummary(items) {
+  const total       = items.reduce((sum, item) => sum + (item.is_free ? 0 : item.total_fee), 0);
+  const paid        = items.reduce((sum, item) => sum + item.amount_paid, 0);
   const outstanding = Math.max(0, total - paid);
 
-  document.getElementById('feeTotal').textContent       = formatCurrency(total);
-  document.getElementById('feePaid').textContent        = formatCurrency(paid);
-  document.getElementById('feeOutstanding').textContent = formatCurrency(outstanding);
+  const totalEl = document.getElementById('feeTotal');
+  const paidEl  = document.getElementById('feePaid');
+  const outEl   = document.getElementById('feeOutstanding');
+  if (totalEl) totalEl.textContent = formatCurrency(total);
+  if (paidEl)  paidEl.textContent  = formatCurrency(paid);
+  if (outEl)   outEl.textContent   = formatCurrency(outstanding);
 }
 
 function getFeeStatus(fee) {
@@ -2252,74 +2311,88 @@ function getFeeStatus(fee) {
   return 'unpaid';
 }
 
-function renderFeesTable(fees) {
+function renderFeesTable(items) {
   const tbody = document.getElementById('feesTbody');
+  if (!tbody) return;
 
-  if (fees.length === 0) {
+  if (items.length === 0) {
     tbody.innerHTML = emptyRow(8, 'No fee records found');
     return;
   }
 
-  tbody.innerHTML = fees.map((f, i) => {
-    const student = allStudents.find(s => s.id === f.student_id) || {};
-    const total   = Number(f.total_fee) || 0;
-    const paid    = Number(f.amount_paid) || 0;
-    const balance = Math.max(0, total - paid);
-    const status  = getFeeStatus(f);
+  tbody.innerHTML = items.map((item, i) => {
+    const s = item.student;
+    const total = item.total_fee;
+    const paid = item.amount_paid;
+    const balance = item.balance;
+    const isFree = item.is_free;
+    const status = item.status;
+    const feeId = item.fee_id;
+
+    let actionHtml = '';
+    if (isFree) {
+      actionHtml = '<span class="free-badge">🎓 FREE SCHOLARSHIP</span>';
+    } else if (status === 'paid') {
+      actionHtml = `
+        <div style="display:inline-flex;align-items:center;gap:0.4rem">
+          <span class="badge badge-green" style="font-weight:700">✓ Fully Paid</span>
+          <button class="btn btn-xs btn-ghost" onclick="openPaymentModal('${feeId || s.id}', '${s.id}')" title="Wax ka beddel lacagta (Edit payment)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+        </div>
+      `;
+    } else {
+      actionHtml = `
+        <div style="display:inline-flex;align-items:center;gap:0.4rem">
+          <button class="btn btn-xs btn-success" onclick="markStudentPaid('${s.id}')" title="Xaqiiji inuu lacagta oo dhan wada bixiyay">
+            ✓ Sax Lacagta
+          </button>
+          <button class="btn btn-xs btn-ghost" onclick="openPaymentModal('${feeId || s.id}', '${s.id}')" title="Qor lacag ama faahfaahin (Record custom payment)">
+            Qor
+          </button>
+        </div>
+      `;
+    }
 
     return `
       <tr>
         <td>
           <div class="cell-name">
-            <div class="mini-avatar ${avatarColor(i)}">${getInitials(student.first_name, student.last_name)}</div>
+            <div class="mini-avatar ${avatarColor(i)}">${getInitials(s.first_name, s.last_name)}</div>
             <div class="cell-name-text">
-              <strong>${student.first_name || '—'} ${student.last_name || ''}</strong>
-              <span>${student.student_id || ''}</span>
+              <strong>${s.first_name || '—'} ${s.last_name || ''}</strong>
+              <span>${s.student_id || ''} ${s.phone ? '· ' + s.phone : ''}</span>
             </div>
           </div>
         </td>
-        <td><span class="badge badge-blue">${LocalDB.getProgramLabel(student.program || '')}</span></td>
-        <td><strong>${formatCurrency(total)}</strong></td>
+        <td>${LocalDB.getProgramBadges(s.program || s.programs)}</td>
+        <td><strong>${isFree ? '$0.00' : formatCurrency(total)}</strong></td>
         <td style="color:var(--success);font-weight:700">${formatCurrency(paid)}</td>
         <td style="color:${balance > 0 ? 'var(--error)' : 'var(--success)'};font-weight:700">${formatCurrency(balance)}</td>
-        <td>${formatDate(f.payment_date)}</td>
+        <td>${item.payment_date ? formatDate(item.payment_date) : '—'}</td>
         <td>${statusBadge(status)}</td>
-        <td>
-          <div class="row-actions" style="gap:0.4rem;align-items:center">
-            ${balance > 0 ? `
-              <button class="btn btn-xs btn-success" onclick="markStudentPaid('${f.id}')" title="Xaqiiji inuu lacagta oo dhan wada bixiyay">
-                ✓ Sax Lacagta
-              </button>
-            ` : '<span style="color:var(--success);font-weight:700;font-size:0.78rem">✓ Bixiyay</span>'}
-            <button onclick="editFee('${f.id}')" title="Edit payment record">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
-            <button class="delete" onclick="promptDeleteRecord('fees', '${f.id}', 'payment record for ${student.first_name || 'student'}')" title="Delete payment">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-              </svg>
-            </button>
-          </div>
-        </td>
+        <td>${actionHtml}</td>
       </tr>
     `;
   }).join('');
 }
 
 function filterFeesTable() {
-  const q      = document.getElementById('feeSearch').value.toLowerCase().trim();
-  const prog   = document.getElementById('feeProgramFilter').value;
-  const status = document.getElementById('feeStatusFilter').value;
+  const q      = (document.getElementById('feeSearch')?.value || '').toLowerCase().trim();
+  const prog   = document.getElementById('feeProgramFilter')?.value || '';
+  const status = document.getElementById('feeStatusFilter')?.value || '';
 
-  const filtered = allFees.filter(f => {
-    const student    = allStudents.find(s => s.id === f.student_id) || {};
-    const textMatch  = !q || `${student.first_name || ''} ${student.last_name || ''} ${student.student_id || ''}`.toLowerCase().includes(q);
-    const progMatch  = !prog || student.program === prog;
-    const statusMatch = !status || getFeeStatus(f) === status;
+  const allFeeItems = allStudents.map(s => getStudentFeeItem(s, allFees));
+
+  const filtered = allFeeItems.filter(item => {
+    const s = item.student;
+    const textMatch = !q || `${s.first_name || ''} ${s.last_name || ''} ${s.student_id || ''} ${s.phone || ''}`.toLowerCase().includes(q)
+      || (item.notes && item.notes.toLowerCase().includes(q));
+
+    const sProgs = Array.isArray(s.programs) ? s.programs : (s.program ? s.program.split(',').map(p=>p.trim()) : []);
+    const progMatch = !prog || sProgs.includes(prog);
+    const statusMatch = !status || item.status === status;
+
     return textMatch && progMatch && statusMatch;
   });
 
@@ -2327,90 +2400,121 @@ function filterFeesTable() {
   updateFeeSummary(filtered);
 }
 
-function openPaymentModal(fee = null, preselectedStudentId = null) {
-  editingFeeId = fee?.id || null;
-  const targetStudentId = fee?.student_id || preselectedStudentId;
+function openPaymentModal(feeOrStudentId = null, preselectedStudentId = null) {
+  allStudents = LocalDB.getStudents();
+  allFees     = LocalDB.getFees();
 
-  document.getElementById('paymentModalTitle').textContent = fee ? 'Edit Fee Record' : 'Record Fee Payment';
-  document.getElementById('pFeeId').value       = fee?.id             || '';
-  document.getElementById('pTotalFee').value    = fee?.total_fee      || '';
-  document.getElementById('pAmountPaid').value  = fee?.amount_paid    || '';
-  document.getElementById('pPaymentDate').value = fee?.payment_date   || new Date().toISOString().slice(0, 10);
-  document.getElementById('pMethod').value      = fee?.payment_method || 'zaad';
-  document.getElementById('pNotes').value       = fee?.notes          || '';
+  let targetStudent = null;
+  let targetFee = null;
 
-  const sel = document.getElementById('pStudent');
-  sel.innerHTML = '<option value="" disabled selected>Select student…</option>';
-  LocalDB.getStudents().forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s.id;
-    opt.textContent = `${s.first_name} ${s.last_name} (${s.student_id} · ${LocalDB.getProgramLabel(s.program)})`;
-    if (targetStudentId === s.id) opt.selected = true;
-    sel.appendChild(opt);
-  });
-
-  if (!fee && targetStudentId) {
-    const s = LocalDB.getStudents().find(x => x.id === targetStudentId);
-    if (s) {
-      const existingFee = LocalDB.getFees().find(f => f.student_id === s.id);
-      if (existingFee) {
-        editingFeeId = existingFee.id;
-        document.getElementById('pFeeId').value      = existingFee.id;
-        document.getElementById('pTotalFee').value   = existingFee.total_fee || s.fee_amount || 0;
-        document.getElementById('pAmountPaid').value = existingFee.amount_paid || 0;
-        document.getElementById('pMethod').value     = existingFee.payment_method || 'zaad';
-        document.getElementById('pNotes').value      = existingFee.notes || '';
-      } else {
-        const expected = s.is_free ? 0 : (s.fee_amount || 0);
-        document.getElementById('pTotalFee').value   = expected;
-        document.getElementById('pAmountPaid').value = expected;
+  if (feeOrStudentId) {
+    targetFee = allFees.find(f => f.id === feeOrStudentId);
+    if (!targetFee) {
+      targetStudent = allStudents.find(s => s.id === feeOrStudentId || s.student_id === feeOrStudentId);
+      if (targetStudent) {
+        targetFee = allFees.find(f => f.student_id === targetStudent.id || f.student_id === targetStudent.student_id);
       }
+    } else {
+      targetStudent = allStudents.find(s => s.id === targetFee.student_id || s.student_id === targetFee.student_id);
     }
   }
 
+  if (!targetStudent && preselectedStudentId) {
+    targetStudent = allStudents.find(s => s.id === preselectedStudentId || s.student_id === preselectedStudentId);
+    if (targetStudent && !targetFee) {
+      targetFee = allFees.find(f => f.student_id === targetStudent.id || f.student_id === targetStudent.student_id);
+    }
+  }
+
+  editingFeeId = targetFee?.id || null;
+
+  document.getElementById('paymentModalTitle').textContent = targetFee ? 'Edit / Record Payment' : 'Record Fee Payment';
+  document.getElementById('pFeeId').value       = targetFee?.id || '';
+  document.getElementById('pPaymentDate').value = targetFee?.payment_date || new Date().toISOString().slice(0, 10);
+  document.getElementById('pMethod').value      = targetFee?.payment_method || 'zaad';
+  document.getElementById('pNotes').value       = targetFee?.notes || '';
+
+  // Populate student dropdown
+  const sel = document.getElementById('pStudent');
+  sel.innerHTML = '<option value="" disabled selected>Select student…</option>';
+  allStudents.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = `${s.first_name} ${s.last_name} (${s.student_id} · ${LocalDB.getProgramLabel(s.program)})`;
+    if (targetStudent && (targetStudent.id === s.id || targetStudent.student_id === s.student_id)) {
+      opt.selected = true;
+    }
+    sel.appendChild(opt);
+  });
+
+  // Calculate and populate fees
+  if (targetStudent) {
+    const agreedFee = (targetStudent.fee_amount !== undefined && targetStudent.fee_amount !== null && targetStudent.fee_amount !== '')
+      ? Number(targetStudent.fee_amount)
+      : (targetFee?.total_fee !== undefined ? Number(targetFee.total_fee) : 0);
+    const total = targetStudent.is_free ? 0 : agreedFee;
+    const paid = targetFee?.amount_paid !== undefined ? Number(targetFee.amount_paid) : total;
+
+    document.getElementById('pTotalFee').value = total;
+    document.getElementById('pAmountPaid').value = paid;
+  } else {
+    document.getElementById('pTotalFee').value = '';
+    document.getElementById('pAmountPaid').value = '';
+  }
+
   ['pStudentErr', 'pTotalFeeErr', 'pAmountPaidErr', 'pPaymentDateErr'].forEach(id => {
-    document.getElementById(id).textContent = '';
+    const el = document.getElementById(id);
+    if (el) el.textContent = '';
   });
 
   openModal('paymentModal');
 }
 
-function markStudentPaid(studentOrFeeId, method = 'zaad') {
+async function markStudentPaid(studentOrFeeId, method = 'zaad') {
+  allStudents = LocalDB.getStudents();
+  allFees     = LocalDB.getFees();
+
+  let student = allStudents.find(s => s.id === studentOrFeeId || s.student_id === studentOrFeeId);
   let fee = allFees.find(f => f.id === studentOrFeeId || f.student_id === studentOrFeeId);
-  let student = allStudents.find(s => s.id === studentOrFeeId || s.id === fee?.student_id);
 
+  if (!student && fee) {
+    student = allStudents.find(s => s.id === fee.student_id || s.student_id === fee.student_id);
+  }
   if (!fee && student) {
-    const sFee = Number(student.fee_amount || 0);
-    fee = {
-      student_id: student.id,
-      total_fee: sFee,
-      amount_paid: sFee,
-      payment_date: new Date().toISOString().slice(0, 10),
-      payment_method: method,
-      notes: 'Fully cleared / Saxay lacagta (1-click payment)',
-    };
-  } else if (fee) {
-    const totalToPay = Number(fee.total_fee || student?.fee_amount || 0);
-    fee = {
-      ...fee,
-      amount_paid: totalToPay,
-      payment_date: new Date().toISOString().slice(0, 10),
-      payment_method: method,
-      notes: (fee.notes ? fee.notes + ' · ' : '') + 'Saxay lacagta (Marked as paid)',
-    };
+    fee = allFees.find(f => f.student_id === student.id || f.student_id === student.student_id);
   }
 
-  if (fee) {
-    LocalDB.saveFee(fee);
-    const sName = student ? `${student.first_name} ${student.last_name}` : 'Ardayga';
-    showToast(`✓ Lacagta ardayga (${sName}) si guul leh ayaa loo saxay inuu wada bixiyay!`, 'success');
-    allFees = LocalDB.getFees();
-    allStudents = LocalDB.getStudents();
-    loadFees();
-    loadStudents();
-    loadRegistrations();
-    if (currentView === 'overview') loadOverview();
+  if (!student) {
+    showToast('Student not found', 'error');
+    return;
   }
+
+  const agreedFee = (student.fee_amount !== undefined && student.fee_amount !== null && student.fee_amount !== '')
+    ? Number(student.fee_amount)
+    : (fee?.total_fee !== undefined ? Number(fee.total_fee) : 0);
+  const total = student.is_free ? 0 : agreedFee;
+
+  const payload = {
+    ...(fee || {}),
+    id: fee?.id,
+    student_id: student.id,
+    total_fee: total,
+    amount_paid: total,
+    payment_date: new Date().toISOString().slice(0, 10),
+    payment_method: fee?.payment_method || method,
+    notes: (fee?.notes ? fee.notes + ' · ' : '') + 'Saxay lacagta (Fully Cleared)',
+  };
+
+  await LocalDB.saveFee(payload);
+  const sName = `${student.first_name} ${student.last_name}`;
+  showToast(`✓ Lacagta ardayga (${sName}) si guul leh ayaa loo saxay inuu wada bixiyay (${total})!`, 'success');
+
+  allFees = LocalDB.getFees();
+  allStudents = LocalDB.getStudents();
+  loadFees();
+  loadStudents();
+  loadRegistrations();
+  if (currentView === 'overview') loadOverview();
 }
 
 function editFee(id) {
@@ -2418,11 +2522,13 @@ function editFee(id) {
   if (fee) openPaymentModal(fee);
 }
 
-function savePayment() {
-  const studentId  = document.getElementById('pStudent').value;
-  const totalFee   = parseFloat(document.getElementById('pTotalFee').value);
-  const amountPaid = parseFloat(document.getElementById('pAmountPaid').value);
+async function savePayment() {
+  const studentId   = document.getElementById('pStudent').value;
+  const totalFee    = parseFloat(document.getElementById('pTotalFee').value);
+  const amountPaid  = parseFloat(document.getElementById('pAmountPaid').value);
   const paymentDate = document.getElementById('pPaymentDate').value;
+  const method      = document.getElementById('pMethod').value;
+  const notes       = document.getElementById('pNotes').value.trim() || null;
 
   let valid = true;
   if (!studentId)                           { document.getElementById('pStudentErr').textContent  = 'Please select student'; valid = false; }
@@ -2431,22 +2537,29 @@ function savePayment() {
   if (!paymentDate)                         { document.getElementById('pPaymentDateErr').textContent = 'Required';           valid = false; }
   if (!valid) return;
 
+  const student = LocalDB.getStudents().find(s => s.id === studentId || s.student_id === studentId);
+  const existingFee = LocalDB.getFees().find(f => f.student_id === studentId || (student && (f.student_id === student.id || f.student_id === student.student_id)));
+
   const payload = {
-    student_id:     studentId,
-    total_fee:      totalFee,
-    amount_paid:    amountPaid,
-    payment_date:   paymentDate,
-    payment_method: document.getElementById('pMethod').value,
-    notes:          document.getElementById('pNotes').value.trim() || null,
+    ...(existingFee || {}),
+    id: editingFeeId || existingFee?.id,
+    student_id: student ? student.id : studentId,
+    total_fee:  totalFee,
+    amount_paid: amountPaid,
+    payment_date: paymentDate,
+    payment_method: method,
+    notes: notes,
   };
 
-  if (editingFeeId) payload.id = editingFeeId;
-
-  LocalDB.saveFee(payload);
+  await LocalDB.saveFee(payload);
   closeModal('paymentModal');
-  showToast(editingFeeId ? 'Payment record updated!' : 'Payment recorded successfully!', 'success');
+  showToast(payload.id ? 'Payment record updated!' : 'Payment recorded successfully!', 'success');
 
+  allStudents = LocalDB.getStudents();
+  allFees     = LocalDB.getFees();
   loadFees();
+  loadStudents();
+  loadRegistrations();
   if (currentView === 'overview') loadOverview();
 }
 

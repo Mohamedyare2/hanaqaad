@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
   <!-- Dashboard Stylesheet (Styled to match public site) -->
-  <link rel="stylesheet" href="dashboard.css?v=3.3.0" />
+  <link rel="stylesheet" href="dashboard.css?v=3.5.0" />
 
   <style>
     /* ── Teacher, Exam & Program extra styles ── */
@@ -835,7 +835,7 @@
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
-                <input type="search" id="feeSearch" placeholder="Search by student name or student ID…"
+                <input type="search" id="feeSearch" placeholder="Search by name or ID (e.g. 523, Cabdisamed)…"
                   aria-label="Search fee records" />
               </div>
               <select class="filter-select" id="feeProgramFilter" aria-label="Filter by program">
@@ -845,7 +845,8 @@
                 <option value="">All Statuses</option>
                 <option value="paid">Paid (Fully Cleared)</option>
                 <option value="partial">Partial</option>
-                <option value="unpaid">Unpaid</option>
+                <option value="unpaid">Unpaid (Outstanding)</option>
+                <option value="free">Free / Scholarship</option>
               </select>
             </div>
 
@@ -1352,9 +1353,9 @@
   <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 
   <!-- Supabase Env Config -->
-  <script src="../env.js?v=3.3.0"></script>
+  <script src="../env.js?v=3.5.0"></script>
   <!-- Dashboard Script (Supabase Edition) -->
-  <script src="dashboard.js?v=3.3.0"></script>
+  <script src="dashboard.js?v=3.5.0"></script>
 </body>
 
 </html>
