@@ -611,9 +611,9 @@ const SupabaseDB = {
       list[existingIndex] = { ...list[existingIndex], ...fee, updated_at: new Date().toISOString() };
       saved = list[existingIndex];
       const students = this.getStudents();
-      const s = students.find(x => x.id === saved.student_id);
+      const s = students.find(x => x.id === saved.student_id || x.student_id === saved.student_id);
       const studentName = s ? `${s.first_name} ${s.last_name}` : 'Student';
-      this.logActivity(`Fee updated: $${saved.amount_paid}/$${saved.total_fee}`, `${studentName} payment status`, 'activity-dot-green');
+      this.logActivity(`Fee updated: ${saved.amount_paid}/${saved.total_fee}`, `${studentName} payment status`, 'activity-dot-green');
     } else {
       saved = {
         ...fee,
@@ -622,27 +622,50 @@ const SupabaseDB = {
       };
       list.unshift(saved);
       const students = this.getStudents();
-      const s = students.find(x => x.id === saved.student_id);
+      const s = students.find(x => x.id === saved.student_id || x.student_id === saved.student_id);
       const studentName = s ? `${s.first_name} ${s.last_name}` : 'Student';
-      this.logActivity(`Fee payment recorded: $${saved.amount_paid}`, `${studentName} via ${(saved.payment_method || 'Zaad').toUpperCase()}`, 'activity-dot-green');
+      this.logActivity(`Fee payment recorded: ${saved.amount_paid}`, `${studentName} via ${(saved.payment_method || 'Zaad').toUpperCase()}`, 'activity-dot-green');
     }
 
     if (this.client && saved) {
+      // Ensure student_id is a UUID referencing students(id) in Supabase
+      let targetStudentUUID = saved.student_id;
+      const isUUID = targetStudentUUID && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetStudentUUID);
+      if (!isUUID) {
+        const studentMatch = this.getStudents().find(s => s.id === saved.student_id || s.student_id === saved.student_id);
+        if (studentMatch && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(studentMatch.id)) {
+          targetStudentUUID = studentMatch.id;
+        }
+      }
+
       const payload = {
-        student_id: saved.student_id,
+        student_id: targetStudentUUID,
         total_fee: Number(saved.total_fee || 0),
         amount_paid: Number(saved.amount_paid || 0),
         payment_date: saved.payment_date || new Date().toISOString().slice(0, 10),
         payment_method: saved.payment_method || 'cash',
         notes: saved.notes || null,
       };
-      const isUUID = saved.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved.id);
-      if (isUUID) payload.id = saved.id;
+
+      const feeIsUUID = saved.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved.id);
+      if (feeIsUUID) {
+        payload.id = saved.id;
+      } else if (targetStudentUUID) {
+        try {
+          const { data: existingRows } = await this.client.from('fees').select('id').eq('student_id', targetStudentUUID).limit(1);
+          if (existingRows && existingRows.length > 0) {
+            payload.id = existingRows[0].id;
+            saved.id = existingRows[0].id;
+          }
+        } catch (_) {}
+      }
 
       try {
         const { data, error } = await this.client.from('fees').upsert([payload]).select();
         if (!error && data && data[0]) {
           saved.id = data[0].id;
+        } else if (error) {
+          console.warn('Supabase fee save error:', error);
         }
       } catch (err) {
         console.warn('Supabase fee save error:', err);
@@ -1251,8 +1274,11 @@ function loadOverview() {
   // Expected tuition = per-student fee_amount (covers students with no fee record yet)
   const totalFees = students.reduce((sum, s) => {
     if (s.is_free) return sum;
-    const feeRec = fees.find(f => f.student_id === s.id);
-    return sum + (Number(feeRec ? feeRec.total_fee : s.fee_amount) || 0);
+    const feeRec = fees.find(f => f.student_id === s.id || f.student_id === s.student_id);
+    const studentFee = (s.fee_amount !== undefined && s.fee_amount !== null && s.fee_amount !== '')
+      ? Number(s.fee_amount)
+      : (feeRec?.total_fee !== undefined ? Number(feeRec.total_fee) : 0);
+    return sum + (Number(studentFee) || 0);
   }, 0);
   const paidFees    = fees.reduce((sum, f) => sum + (Number(f.amount_paid) || 0), 0);
   const fcEl = document.getElementById('statFeesCollected');
@@ -1310,8 +1336,11 @@ function loadOverview() {
   // Derive expected tuition from each student's own fee_amount (covers students with no fee record yet)
   const totalTuitionSum = students.reduce((sum, s) => {
     if (s.is_free) return sum;
-    const feeRec = fees.find(f => f.student_id === s.id);
-    return sum + (Number(feeRec ? feeRec.total_fee : s.fee_amount) || 0);
+    const feeRec = fees.find(f => f.student_id === s.id || f.student_id === s.student_id);
+    const studentFee = (s.fee_amount !== undefined && s.fee_amount !== null && s.fee_amount !== '')
+      ? Number(s.fee_amount)
+      : (feeRec?.total_fee !== undefined ? Number(feeRec.total_fee) : 0);
+    return sum + (Number(studentFee) || 0);
   }, 0);
   const totalPaidSum    = fees.reduce((sum, f) => sum + (Number(f.amount_paid) || 0), 0);
   const totalBalance    = Math.max(0, totalTuitionSum - totalPaidSum);
@@ -1325,8 +1354,11 @@ function loadOverview() {
       overviewFeesTbody.innerHTML = emptyRow(8, 'Arday weli lama diiwaangelin (No students enrolled yet)');
     } else {
       overviewFeesTbody.innerHTML = students.slice(0, 8).map((s, i) => {
-        const feeRecord = fees.find(f => f.student_id === s.id) || {};
-        const total = Number(feeRecord.total_fee ?? s.fee_amount ?? 0);
+        const feeRecord = fees.find(f => f.student_id === s.id || f.student_id === s.student_id) || {};
+        const agreedFee = (s.fee_amount !== undefined && s.fee_amount !== null && s.fee_amount !== '')
+          ? Number(s.fee_amount)
+          : (feeRecord.total_fee !== undefined ? Number(feeRecord.total_fee) : 0);
+        const total = s.is_free ? 0 : agreedFee;
         const paid = Number(feeRecord.amount_paid ?? 0);
         const balance = Math.max(0, total - paid);
         const isFree = s.is_free;
@@ -1439,8 +1471,11 @@ function renderStudentsTable(students) {
   }
 
   tbody.innerHTML = students.map((s, i) => {
-    const feeRecord = allFees.find(f => f.student_id === s.id) || {};
-    const total = Number(feeRecord.total_fee ?? s.fee_amount ?? 0);
+    const feeRecord = allFees.find(f => f.student_id === s.id || f.student_id === s.student_id) || {};
+    const agreedFee = (s.fee_amount !== undefined && s.fee_amount !== null && s.fee_amount !== '')
+      ? Number(s.fee_amount)
+      : (feeRecord.total_fee !== undefined ? Number(feeRecord.total_fee) : 0);
+    const total = s.is_free ? 0 : agreedFee;
     const paid = Number(feeRecord.amount_paid ?? 0);
     const balance = Math.max(0, total - paid);
     const isFree = s.is_free;
@@ -1649,13 +1684,7 @@ function initRegistrationEvents() {
   document.getElementById('regStatusFilter').addEventListener('change', filterRegistrationsTable);
   document.getElementById('saveRegistrationBtn').addEventListener('click', saveRegistration);
 
-  // Auto-fill fee amount when program is selected
-  document.getElementById('rProgram').addEventListener('change', e => {
-    const isFree = document.getElementById('rFree').checked;
-    if (!isFree && e.target.value) {
-      document.getElementById('rFeeAmount').value = LocalDB.getProgramFee(e.target.value);
-    }
-  });
+  // Fee is managed manually per registration
 }
 
 function loadRegistrations() {
@@ -1748,7 +1777,6 @@ function renderRegistrationProgramCheckboxes(selectedKeys = []) {
         <input type="checkbox" name="rPrograms" value="${prog.key}" data-fee="${prog.fee || 0}" ${isChecked ? 'checked' : ''} onchange="handleProgramCheckboxChange(this)" />
         <div class="program-choice-content">
           <span class="program-choice-title">${prog.label}</span>
-          <span class="program-choice-fee">$${prog.fee || 0} USD</span>
         </div>
       </label>
     `;
@@ -1762,10 +1790,10 @@ function handleProgramCheckboxChange(cb) {
   if (card) {
     card.classList.toggle('selected', cb.checked);
   }
-  updateSelectedProgramsSummary(true);
+  updateSelectedProgramsSummary(false);
 }
 
-function updateSelectedProgramsSummary(recalcFee = true) {
+function updateSelectedProgramsSummary(recalcFee = false) {
   const checkedBoxes = Array.from(document.querySelectorAll('input[name="rPrograms"]:checked'));
   const countBadge = document.getElementById('selectedProgramsBadge');
   if (countBadge) {
@@ -1779,9 +1807,9 @@ function updateSelectedProgramsSummary(recalcFee = true) {
 
   const isFree = document.getElementById('rFree')?.checked;
   const feeInput = document.getElementById('rFeeAmount');
-  if (feeInput && !isFree && recalcFee) {
+  if (feeInput && !isFree && recalcFee && (!feeInput.value || feeInput.value === '0')) {
     const totalFee = checkedBoxes.reduce((sum, cb) => sum + (parseFloat(cb.dataset.fee) || 0), 0);
-    feeInput.value = totalFee;
+    if (totalFee > 0) feeInput.value = totalFee;
   }
 
   const errEl = document.getElementById('rProgramErr');
@@ -1793,15 +1821,16 @@ function handleFreeToggle() {
   const feeInput = document.getElementById('rFeeAmount');
   if (!feeInput) return;
   if (isFree) {
+    feeInput.dataset.prevFee = feeInput.value;
     feeInput.value = 0;
     feeInput.disabled = true;
     feeInput.style.opacity = '0.5';
   } else {
     feeInput.disabled = false;
     feeInput.style.opacity = '1';
-    const checkedBoxes = Array.from(document.querySelectorAll('input[name="rPrograms"]:checked'));
-    const totalFee = checkedBoxes.reduce((sum, cb) => sum + (parseFloat(cb.dataset.fee) || 0), 0);
-    feeInput.value = totalFee;
+    feeInput.value = (feeInput.dataset.prevFee !== undefined && feeInput.dataset.prevFee !== '')
+      ? feeInput.dataset.prevFee
+      : '';
   }
 }
 
@@ -1820,13 +1849,14 @@ function openRegistrationModal(reg = null) {
   document.getElementById('rFree').checked         = reg?.is_free    || false;
   document.getElementById('rRegistrationId').value = reg?.id         || '';
 
-  // Fee calculation / display
+  // Fee calculation / display: respect student's fee_amount
   const feeInput = document.getElementById('rFeeAmount');
-  if (reg?.fee_amount !== undefined && reg?.fee_amount !== '') {
+  if (reg && reg.fee_amount !== undefined && reg.fee_amount !== null && reg.fee_amount !== '') {
     feeInput.value = reg.fee_amount;
+  } else if (!reg) {
+    feeInput.value = '';
   } else {
-    const checkedBoxes = Array.from(document.querySelectorAll('input[name="rPrograms"]:checked'));
-    feeInput.value = checkedBoxes.reduce((sum, cb) => sum + (parseFloat(cb.dataset.fee) || 0), 0);
+    feeInput.value = '';
   }
 
   if (reg?.is_free) {
@@ -1860,6 +1890,9 @@ function editRegistration(id) {
 function editRegistrationByStudentId(studentId) {
   const student = LocalDB.getStudents().find(s => s.id === studentId || s.student_id === studentId);
   if (student) {
+    const feeVal = (student.fee_amount !== undefined && student.fee_amount !== null && student.fee_amount !== '')
+      ? student.fee_amount
+      : '';
     openRegistrationModal({
       id: student.id,
       first_name: student.first_name,
@@ -1869,7 +1902,7 @@ function editRegistrationByStudentId(studentId) {
       programs:   student.programs,
       pin:        student.pin || student.security_pin,
       address:    student.address,
-      fee_amount: student.fee_amount !== undefined ? student.fee_amount : LocalDB.getProgramFee(student.program),
+      fee_amount: feeVal,
       is_free:    student.is_free || false,
       student_id: student.student_id,
       status:     student.status || 'active',
@@ -1885,7 +1918,8 @@ async function saveRegistration() {
   const addressEl = document.getElementById('rAddress');
   const address   = addressEl ? addressEl.value.trim() : 'Berbera, Somaliland';
   const isFree    = document.getElementById('rFree').checked;
-  const feeAmount = isFree ? 0 : (parseFloat(document.getElementById('rFeeAmount').value) || 0);
+  const rawFeeVal = document.getElementById('rFeeAmount').value;
+  const feeAmount = isFree ? 0 : (rawFeeVal !== '' && !isNaN(rawFeeVal) ? parseFloat(rawFeeVal) : 0);
 
   // Selected multi-programs
   const selectedBoxes = Array.from(document.querySelectorAll('input[name="rPrograms"]:checked'));
@@ -1953,10 +1987,21 @@ async function saveRegistration() {
   };
   await LocalDB.saveRegistration(regPayload);
 
-  // 3. Create/update initial Fee record if new
-  if (!editingRegistrationId) {
+  // 3. Create or UPDATE student Fee record in fees table
+  const allCurrentStudents = LocalDB.getStudents();
+  const currentStudent = allCurrentStudents.find(s => s.student_id === assignedStudentId) || studentPayload;
+  const targetStudentId = currentStudent.id || studentRecordId;
+
+  const existingFee = LocalDB.getFees().find(f => f.student_id === targetStudentId || f.student_id === studentRecordId || f.student_id === assignedStudentId);
+  if (existingFee) {
     await LocalDB.saveFee({
-      student_id:     studentRecordId,
+      ...existingFee,
+      student_id: targetStudentId,
+      total_fee: isFree ? 0 : feeAmount,
+    });
+  } else {
+    await LocalDB.saveFee({
+      student_id:     targetStudentId,
       total_fee:      isFree ? 0 : feeAmount,
       amount_paid:    0,
       payment_date:   new Date().toISOString().slice(0, 10),
@@ -2703,6 +2748,81 @@ function executeDelete() {
 /* ────────────────────────────────────────────────────────────
    21. EXPOSE GLOBAL FUNCTIONS
 ──────────────────────────────────────────────────────────── */
+
+/* ────────────────────────────────────────────────────────────
+   QUICK ADD COURSE (Inline from Registration Modal)
+──────────────────────────────────────────────────────────── */
+function openInlineAddCourseModal() {
+  const nameEl = document.getElementById('qCourseName');
+  const codeEl = document.getElementById('qCourseCode');
+  const nameErr = document.getElementById('qCourseNameErr');
+  const codeErr = document.getElementById('qCourseCodeErr');
+  if (nameEl) nameEl.value = '';
+  if (codeEl) codeEl.value = '';
+  if (nameErr) nameErr.textContent = '';
+  if (codeErr) codeErr.textContent = '';
+  openModal('quickAddCourseModal');
+}
+
+function saveQuickAddCourse() {
+  const nameInput = document.getElementById('qCourseName');
+  const codeInput = document.getElementById('qCourseCode');
+  const name = nameInput ? nameInput.value.trim() : '';
+  let code = codeInput ? codeInput.value.trim().toUpperCase() : '';
+
+  const nameErr = document.getElementById('qCourseNameErr');
+  const codeErr = document.getElementById('qCourseCodeErr');
+  if (nameErr) nameErr.textContent = '';
+  if (codeErr) codeErr.textContent = '';
+
+  if (!name) {
+    if (nameErr) nameErr.textContent = 'Fadlan geli magaca koorsada (Course name is required)';
+    return;
+  }
+
+  // Auto-generate code if empty (e.g. initials or sanitized prefix)
+  if (!code) {
+    const words = name.split(/\s+/).filter(Boolean);
+    if (words.length > 1) {
+      code = words.map(w => w[0]).join('').toUpperCase().slice(0, 6);
+    } else {
+      code = name.slice(0, 4).toUpperCase();
+    }
+  }
+
+  const key = code.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  const existing = LocalDB.getPrograms().find(p => p.key === key);
+
+  let finalKey = key;
+  if (existing) {
+    finalKey = existing.key;
+  } else {
+    const fullLabel = code ? `${name} (${code})` : name;
+    LocalDB.saveProgram({
+      key: finalKey,
+      label: fullLabel,
+      fee: 0,
+      builtin: false
+    });
+  }
+
+  // Refresh all program dropdowns across dashboard
+  populateAllProgramDropdowns();
+  if (typeof loadPrograms === 'function') loadPrograms();
+
+  // Preserve all currently selected checkboxes and check the new course
+  const currentChecked = Array.from(document.querySelectorAll('input[name="rPrograms"]:checked')).map(cb => cb.value);
+  if (!currentChecked.includes(finalKey)) {
+    currentChecked.push(finalKey);
+  }
+
+  // Re-render course checkboxes with preserved checks + new course checked
+  renderRegistrationProgramCheckboxes(currentChecked);
+
+  closeModal('quickAddCourseModal');
+  showToast(`✅ Koorsada "${name}" waa lagu daray liiska!`, 'success');
+}
+
 window.switchView             = switchView;
 window.openModal              = openModal;
 window.closeModal             = closeModal;
@@ -2723,3 +2843,5 @@ window.openProgramModal       = openProgramModal;
 window.deleteProgram          = deleteProgram;
 window.setStudentAttendance    = setStudentAttendance;
 window.promptDeleteRecord     = promptDeleteRecord;
+window.openInlineAddCourseModal = openInlineAddCourseModal;
+window.saveQuickAddCourse       = saveQuickAddCourse;
