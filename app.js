@@ -486,6 +486,33 @@ function initStudentPortal() {
     maths: 'Mathematics (Maths)',
   };
 
+  function getProgramTitle(key) {
+    if (!key) return '';
+    const cleanKey = String(key).trim().toLowerCase();
+    if (PROGRAM_LABELS[cleanKey]) return PROGRAM_LABELS[cleanKey];
+    try {
+      const progs = JSON.parse(localStorage.getItem('hanaqaad_programs') || '[]');
+      const match = progs.find(p => p.key && p.key.toLowerCase() === cleanKey);
+      if (match && match.label) return match.label;
+    } catch (_) {}
+    return String(key).trim();
+  }
+
+  // Normalizes any ID input format (e.g. "523", "hc-523", "HC523", "hc 523", "#523" -> "HC-523")
+  function normalizeStudentId(rawInput) {
+    if (!rawInput) return '';
+    let str = String(rawInput).trim().toUpperCase();
+    str = str.replace(/^#+/, '').trim();
+    if (/^\d+$/.test(str)) {
+      return `HC-${str}`;
+    }
+    const match = str.match(/^HC\s*[-_./\s]*\s*(\d+)$/i);
+    if (match) {
+      return `HC-${match[1]}`;
+    }
+    return str;
+  }
+
   function escapeHtml(str) {
     if (!str) return '';
     return String(str)
@@ -519,17 +546,18 @@ function initStudentPortal() {
     e.preventDefault();
     clearNotice();
 
-    const queryId = idInput.value.trim().toUpperCase();
+    const rawInputId = idInput.value.trim();
+    const normalizedId = normalizeStudentId(rawInputId);
     const queryPin = pinInput.value.trim();
 
-    if (!queryId) {
-      showNotice('Please enter your Student ID (e.g. HC-500).', 'warning');
+    if (!rawInputId) {
+      showNotice('Fadlan geli Student ID (tusaale: 523 ama HC-523).', 'warning');
       idInput.focus();
       return;
     }
 
     if (!queryPin) {
-      showNotice('Please enter your 4-digit Security PIN or last 4 digits of your phone number.', 'warning');
+      showNotice('Fadlan geli 4-digit Security PIN ama 4-ta lambar ee dambe ee taleefankaaga.', 'warning');
       pinInput.focus();
       return;
     }
@@ -540,7 +568,7 @@ function initStudentPortal() {
       submitBtn.disabled = true;
       submitBtn.innerHTML = `
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
-        Verifying Records…
+        Xaqiijinta Xogta Ardayga…
       `;
     }
 
@@ -552,48 +580,118 @@ function initStudentPortal() {
     };
 
     try {
-      // 1. Try Supabase secure RPC first
       const sb = (window.supabase && window.ENV_SUPABASE_URL && window.ENV_SUPABASE_ANON_KEY)
         ? window.supabase.createClient(window.ENV_SUPABASE_URL, window.ENV_SUPABASE_ANON_KEY)
         : null;
 
+      // 1. Try Supabase secure RPC first (using normalized ID e.g. "HC-523", with fallback to raw input)
       if (sb) {
-        const { data: rpcRes, error: rpcErr } = await sb.rpc('get_student_portal_record', {
-          p_student_id: queryId,
+        let rpcRes = null;
+        let rpcErr = null;
+
+        const { data: res1, error: err1 } = await sb.rpc('get_student_portal_record', {
+          p_student_id: normalizedId,
           p_pin: queryPin
         });
 
-        if (!rpcErr && rpcRes) {
+        if (!err1 && res1) {
+          rpcRes = res1;
+        } else if (err1) {
+          rpcErr = err1;
+        }
+
+        // If not found with normalized ID, try with raw uppercase input as fallback
+        if (rpcRes && rpcRes.error === 'NOT_FOUND' && normalizedId !== rawInputId.toUpperCase()) {
+          const { data: res2 } = await sb.rpc('get_student_portal_record', {
+            p_student_id: rawInputId.toUpperCase(),
+            p_pin: queryPin
+          });
+          if (res2) rpcRes = res2;
+        }
+
+        if (rpcRes) {
           restoreBtn();
           if (rpcRes.success && rpcRes.student) {
             renderStudentPortalView(rpcRes.student, rpcRes.attendance, rpcRes.fees, rpcRes.exams);
             return;
           } else if (rpcRes.error === 'NOT_FOUND') {
-            showNotice(`No student record found with ID "<strong>${escapeHtml(queryId)}</strong>". Please double check your Student ID format (e.g. HC-500) or contact campus administration.`, 'error');
+            showNotice(`Lama helin arday leh ID-ga "<strong>${escapeHtml(rawInputId)}</strong>". Fadlan hubi lambarkaaga (tusaale: 523 ama HC-523).`, 'error');
             resultArea.style.display = 'none';
             return;
           } else if (rpcRes.error === 'INVALID_PIN') {
             showNotice(
-              `<strong>Security Verification Failed.</strong> The PIN or phone digits you entered do not match Student ID <strong>${escapeHtml(queryId)}</strong>. For student privacy, confidential grades and fee details cannot be displayed without correct verification.`,
+              `<strong>PIN-ku waa khalad (Verification Failed).</strong> PIN-ka aad galisay kuma habboona Student ID <strong>${escapeHtml(rawInputId)}</strong>. Fadlan hubi PIN-kaaga 4-ta god ah ama 4-ta lambar ee dambe ee taleefankaagii diiwaangelinta.`,
               'warning'
             );
             resultArea.style.display = 'none';
             return;
           }
         }
+
+        // 2. Direct Supabase Query Fallback (in case RPC was temporarily unavailable)
+        try {
+          const { data: matchedStudents } = await sb.from('students')
+            .select('*')
+            .or(`student_id.eq.${normalizedId},student_id.eq.${rawInputId.toUpperCase()}`)
+            .limit(1);
+
+          if (matchedStudents && matchedStudents.length > 0) {
+            const student = matchedStudents[0];
+            const storedPin = String(student.security_pin || student.pin || '').trim();
+            const rawPhone = String(student.phone || '').replace(/\D/g, '');
+            const phoneLast4 = rawPhone.slice(-4);
+            const isVerified = (storedPin && queryPin === storedPin) || (phoneLast4 && queryPin === phoneLast4);
+
+            if (!isVerified) {
+              restoreBtn();
+              showNotice(
+                `<strong>PIN-ku waa khalad (Verification Failed).</strong> PIN-ka aad galisay kuma habboona Student ID <strong>${escapeHtml(student.student_id || rawInputId)}</strong>.`,
+                'warning'
+              );
+              resultArea.style.display = 'none';
+              return;
+            }
+
+            // Fetch fees, exams, and attendance in parallel
+            const [feeRes, examsRes, attRes] = await Promise.all([
+              sb.from('fees').select('*').eq('student_id', student.id).limit(1),
+              sb.from('exams').select('*').eq('student_id', student.id).order('created_at', { ascending: false }),
+              sb.from('attendance').select('*').eq('student_id', student.id)
+            ]);
+
+            const feeData = feeRes.data && feeRes.data[0] ? feeRes.data[0] : null;
+            const examsData = examsRes.data || [];
+            const attRows = attRes.data || [];
+            const attSummary = {
+              total_sessions: attRows.length,
+              present_count: attRows.filter(a => a.status === 'present').length,
+              absent_count: attRows.filter(a => a.status === 'absent').length,
+              late_count: attRows.filter(a => a.status === 'late').length,
+            };
+
+            restoreBtn();
+            renderStudentPortalView(student, attSummary, feeData, examsData);
+            return;
+          }
+        } catch (directErr) {
+          console.warn('Direct Supabase query fallback notice:', directErr);
+        }
       }
 
-      // 2. Client-side database cache fallback
+      // 3. Client-side localStorage fallback
       const students = JSON.parse(localStorage.getItem('hanaqaad_students') || '[]');
-      const student = students.find(s =>
-        (s.student_id && s.student_id.toUpperCase() === queryId) ||
-        (s.id && s.id.toUpperCase() === queryId)
-      );
+      const inputDigits = rawInputId.replace(/\D/g, '');
+      const student = students.find(s => {
+        const sId = (s.student_id || '').toUpperCase();
+        const dbId = (s.id || '').toUpperCase();
+        const sDigits = (s.student_id || '').replace(/\D/g, '');
+        return sId === normalizedId || sId === rawInputId.toUpperCase() || dbId === rawInputId.toUpperCase() || (inputDigits && sDigits && inputDigits === sDigits);
+      });
 
       restoreBtn();
 
       if (!student) {
-        showNotice(`No student record found with ID "<strong>${escapeHtml(queryId)}</strong>". Please double check your Student ID format (e.g. HC-500) or contact campus administration.`, 'error');
+        showNotice(`Lama helin arday leh ID-ga "<strong>${escapeHtml(rawInputId)}</strong>". Fadlan hubi lambarkaaga (tusaale: 523 ama HC-523).`, 'error');
         resultArea.style.display = 'none';
         return;
       }
@@ -607,7 +705,7 @@ function initStudentPortal() {
 
       if (!isVerified) {
         showNotice(
-          `<strong>Security Verification Failed.</strong> The PIN or phone digits you entered do not match Student ID <strong>${escapeHtml(student.student_id || queryId)}</strong>. For student privacy, confidential grades and fee details cannot be displayed without correct verification.`,
+          `<strong>PIN-ku waa khalad (Verification Failed).</strong> PIN-ka aad galisay kuma habboona Student ID <strong>${escapeHtml(student.student_id || rawInputId)}</strong>.`,
           'warning'
         );
         resultArea.style.display = 'none';
@@ -620,18 +718,16 @@ function initStudentPortal() {
     } catch (err) {
       console.error('Portal lookup error:', err);
       restoreBtn();
-      showNotice('An error occurred while connecting to the verification service. Please check your internet connection.', 'error');
+      showNotice('Khalad ayaa dhacay intii lagu guda jiray xaqiijinta xogta. Fadlan hubi khadkaaga internet-ka.', 'error');
     }
   });
 
   function renderStudentPortalView(student, attendanceOverride = null, feesOverride = null, examsOverride = null) {
     const studentIdCode = student.student_id || student.id;
     const fullName = `${student.first_name || ''} ${student.last_name || ''}`.trim() || 'Enrolled Student';
-    const programLabels = (student.program || '').split(',').map(p => {
-      const k = p.trim().toLowerCase();
-      return PROGRAM_LABELS[k] || (k ? k.toUpperCase() : '');
-    }).filter(Boolean);
-    const programName = programLabels.length > 0 ? programLabels.join(' & ') : 'Diploma Course';
+    const rawProgs = Array.isArray(student.programs) ? student.programs : (student.program || '').split(',');
+    const programLabels = rawProgs.map(p => getProgramTitle(p)).filter(Boolean);
+    const programName = programLabels.length > 0 ? programLabels.join(' & ') : 'General Diploma Course';
     const initials = `${(student.first_name || 'H')[0]}${(student.last_name || 'C')[0]}`.toUpperCase();
 
     // Mask phone number for privacy e.g. "+252 63 •••• 56"
@@ -672,25 +768,30 @@ function initStudentPortal() {
       attRate >= 85 ? 'Excellent Attendance' :
       attRate >= 70 ? 'Regular Attendance' : 'Attendance Warning';
 
-    // ── 2. Fee Accounting ──
-    let totalFee = student.fee_amount !== undefined ? Number(student.fee_amount) : 120;
-    let amountPaid = 0;
+    // ── 2. Fee Accounting (Fix: Declare feeRecord at function level) ──
+    let feeRecord = feesOverride || null;
     let isFreeStudent = Boolean(student.is_free);
-    let feeDesc = '';
+    let totalFee = (student.fee_amount !== undefined && student.fee_amount !== null && student.fee_amount !== '')
+      ? Number(student.fee_amount)
+      : Number(feeRecord?.total_fee || 0);
+    let amountPaid = Number(feeRecord?.amount_paid || 0);
+    let feeDesc = feeRecord?.notes || '';
 
-    if (feesOverride) {
-      totalFee = Number(feesOverride.total_fee || totalFee);
-      amountPaid = Number(feesOverride.amount_paid || 0);
-      if (feesOverride.is_free !== undefined) isFreeStudent = Boolean(feesOverride.is_free);
-      if (feesOverride.notes) feeDesc = feesOverride.notes;
-    } else {
+    if (!feeRecord) {
       const fees = JSON.parse(localStorage.getItem('hanaqaad_fees') || '[]');
-      const feeRecord = fees.find(f => f.student_id === student.id || f.student_id === student.student_id);
+      feeRecord = fees.find(f => f.student_id === student.id || f.student_id === student.student_id);
       if (feeRecord) {
-        totalFee = Number(feeRecord.total_fee || totalFee);
+        if (student.fee_amount === undefined || student.fee_amount === null || student.fee_amount === '') {
+          totalFee = Number(feeRecord.total_fee || 0);
+        }
         amountPaid = Number(feeRecord.amount_paid || 0);
+        if (feeRecord.notes) feeDesc = feeRecord.notes;
       }
-      isFreeStudent = student.is_free || (feeRecord && Number(feeRecord.total_fee) === 0);
+    }
+
+    if (isFreeStudent) {
+      totalFee = 0;
+      amountPaid = 0;
     }
 
     let balance = Math.max(0, totalFee - amountPaid);
